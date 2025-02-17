@@ -32,6 +32,10 @@ public class SimplePlayer : MonoBehaviour
         Vector2 directionToAttention = (attentionCircle.position - transform.position).normalized;
         Vector2 perpendicular = new Vector2(-directionToAttention.y, directionToAttention.x);
 
+        //Rotation
+        transform.right = directionToAttention;
+
+        // Movment
         movement = directionToAttention * vertical + perpendicular * horizontal;
 
         // Normalize diagonal movement
@@ -43,8 +47,8 @@ public class SimplePlayer : MonoBehaviour
 
     void MoveFoV()
     {
-        fieldOfView.SetOrigin(transform.position);
-        fieldOfView.SetAimDirection((attentionCircle.position - transform.position).normalized);
+        // fieldOfView.SetOrigin(transform.position);
+        // fieldOfView.SetAimDirection((attentionCircle.position - transform.position).normalized);
     }
 
     void FixedUpdate()

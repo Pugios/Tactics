@@ -1,32 +1,36 @@
-using System.Collections;
-using System.Collections.Generic;
+using Unity.VisualScripting;
+using UnityEditor.Experimental.GraphView;
 using UnityEngine;
 
-public class FieldOfView : MonoBehaviour {    
+public class FieldOfView : MonoBehaviour
+{
     [SerializeField] private LayerMask layerMask;
+    [SerializeField] private GameObject player;
+
     private Mesh mesh;
+
     private float fov;
     private float viewDistance;
-    private float startingAngle;
 
-    private Vector3 origin;
-
-    private void Start() {
+    void Start()
+    {
         mesh = new Mesh();
         GetComponent<MeshFilter>().mesh = mesh;
         fov = 103f;
         viewDistance = 50f;
     }
 
-    private void LateUpdate() {     // LateUpdate because Player updates Angle and Origin in Update (lateupdate happens after update)
-        // Ensure the FieldOfView follows the player's position
-        origin = transform.position;
+    void LateUpdate()
+    {
+        DrawFoV();
+    }
 
-        Debug.Log("FieldOfView Position: " + transform.position);
-        Debug.Log("Player Position: " + transform.parent.position);
+    void DrawFoV()
+    {
+        Vector3 origin = player.transform.position;
+        float direction = GetAngleFromVectorFloat(player.transform.right) + fov / 2f;
 
         int rayCount = 50;
-        float angle = startingAngle;
         float angleIncrease = fov / rayCount;
 
         Vector3[] vertices = new Vector3[rayCount + 1 + 1];
@@ -40,10 +44,10 @@ public class FieldOfView : MonoBehaviour {
         // for each ray
         for (int i = 0; i <= rayCount; i++) {
             Vector3 vertex;
-            RaycastHit2D raycastHit2D = Physics2D.Raycast(origin, GetVectorFromAngle(angle), viewDistance, layerMask);
+            RaycastHit2D raycastHit2D = Physics2D.Raycast(origin, GetVectorFromAngle(direction), viewDistance, layerMask);
             if (raycastHit2D.collider == null) {
                 // No hit
-                vertex = origin + GetVectorFromAngle(angle) * viewDistance;
+                vertex = origin + GetVectorFromAngle(direction) * viewDistance;
             } else {
                 // Hit object
                 vertex = raycastHit2D.point;
@@ -59,7 +63,7 @@ public class FieldOfView : MonoBehaviour {
             }
 
             vertexIndex++;
-            angle -= angleIncrease;
+            direction -= angleIncrease;
         }
 
         mesh.vertices = vertices;
@@ -68,23 +72,7 @@ public class FieldOfView : MonoBehaviour {
         mesh.bounds = new Bounds(origin, Vector3.one * 1000f);
     }
 
-    public void SetOrigin(Vector3 origin) {
-        this.origin = origin;
-    }
-
-    public void SetAimDirection(Vector3 aimDirection) {
-        startingAngle = GetAngleFromVectorFloat(aimDirection) + fov / 2f;
-    }
-
-    public void SetFoV(float fov) {
-        this.fov = fov;
-    }
-
-    public void SetViewDistance(float viewDistance) {
-        this.viewDistance = viewDistance;
-    }
-
-    private Vector3 GetVectorFromAngle(float angle) {
+     private Vector3 GetVectorFromAngle(float angle) {
         float angleRad = angle * (Mathf.PI / 180f);
         return new Vector3(Mathf.Cos(angleRad), Mathf.Sin(angleRad));
     }
@@ -96,5 +84,4 @@ public class FieldOfView : MonoBehaviour {
 
         return n;
     }
-
 }
