@@ -3,8 +3,7 @@ using UnityEngine;
 public class SimplePlayer : MonoBehaviour
 {
     [SerializeField] private Transform attentionCircle;
-    [SerializeField] private FieldOfView fieldOfView;
-
+    private FieldOfView fieldOfView;
 
     Rigidbody2D body;
     public float runSpeed = 20.0f;
@@ -16,6 +15,7 @@ public class SimplePlayer : MonoBehaviour
     void Start()
     {
         body = GetComponent<Rigidbody2D>();
+        fieldOfView = GetComponentInChildren<FieldOfView>();
     }
 
     void Update()

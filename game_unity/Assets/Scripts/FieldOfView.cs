@@ -7,18 +7,24 @@ public class FieldOfView : MonoBehaviour {
     private Mesh mesh;
     private float fov;
     private float viewDistance;
-    private Vector3 origin;
     private float startingAngle;
+
+    private Vector3 origin;
 
     private void Start() {
         mesh = new Mesh();
         GetComponent<MeshFilter>().mesh = mesh;
         fov = 103f;
         viewDistance = 50f;
-        origin = Vector3.zero;
     }
 
     private void LateUpdate() {     // LateUpdate because Player updates Angle and Origin in Update (lateupdate happens after update)
+        // Ensure the FieldOfView follows the player's position
+        origin = transform.position;
+
+        Debug.Log("FieldOfView Position: " + transform.position);
+        Debug.Log("Player Position: " + transform.parent.position);
+
         int rayCount = 50;
         float angle = startingAngle;
         float angleIncrease = fov / rayCount;
@@ -26,11 +32,12 @@ public class FieldOfView : MonoBehaviour {
         Vector3[] vertices = new Vector3[rayCount + 1 + 1];
         Vector2[] uv = new Vector2[vertices.Length];
         int[] triangles = new int[rayCount * 3];
-
+        
         vertices[0] = origin;
 
         int vertexIndex = 1;
         int triangleIndex = 0;
+        // for each ray
         for (int i = 0; i <= rayCount; i++) {
             Vector3 vertex;
             RaycastHit2D raycastHit2D = Physics2D.Raycast(origin, GetVectorFromAngle(angle), viewDistance, layerMask);
@@ -54,7 +61,6 @@ public class FieldOfView : MonoBehaviour {
             vertexIndex++;
             angle -= angleIncrease;
         }
-
 
         mesh.vertices = vertices;
         mesh.uv = uv;

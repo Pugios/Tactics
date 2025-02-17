@@ -664,9 +664,9 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 588120820}
+  - component: {fileID: 588120817}
   - component: {fileID: 588120819}
   - component: {fileID: 588120818}
-  - component: {fileID: 588120817}
   m_Layer: 11
   m_Name: FieldOfView
   m_TagString: Untagged
@@ -755,7 +755,7 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 0}
+  m_Father: {fileID: 1229188481}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &633228711
 GameObject:
@@ -1451,7 +1451,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   attentionCircle: {fileID: 1128759709}
-  fieldOfView: {fileID: 588120817}
   runSpeed: 20
 --- !u!212 &1229188480
 SpriteRenderer:
@@ -1520,7 +1519,8 @@ Transform:
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 10, y: 10, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 588120820}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!58 &1229188482
@@ -1574,7 +1574,7 @@ Rigidbody2D:
   m_Mass: 1
   m_LinearDamping: 0
   m_AngularDamping: 0.05
-  m_GravityScale: 1
+  m_GravityScale: 0
   m_Material: {fileID: 0}
   m_IncludeLayers:
     serializedVersion: 2
@@ -2081,7 +2081,6 @@ SceneRoots:
   m_Roots:
   - {fileID: 633228715}
   - {fileID: 1229188481}
-  - {fileID: 588120820}
   - {fileID: 1128759709}
   - {fileID: 1794318349}
   - {fileID: 699487215}
