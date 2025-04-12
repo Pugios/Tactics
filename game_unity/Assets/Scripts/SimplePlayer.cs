@@ -3,25 +3,23 @@ using UnityEngine;
 public class SimplePlayer : MonoBehaviour
 {
     [SerializeField] private Transform attentionCircle;
-    private FieldOfView fieldOfView;
-
-    Rigidbody2D body;
+    [SerializeField] private FieldOfView fieldOfView;
     public float runSpeed = 20.0f;
+    private float moveLimiter = 0.7f;
+    private Vector2 movement;
 
-    float moveLimiter = 0.7f;
-    Vector2 movement;
+    private Rigidbody2D body;
+
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
         body = GetComponent<Rigidbody2D>();
-        fieldOfView = GetComponentInChildren<FieldOfView>();
     }
 
     void Update()
     {
         HandleMovement();
-        MoveFoV();
     }
 
     void HandleMovement()
@@ -43,12 +41,6 @@ public class SimplePlayer : MonoBehaviour
         {
             movement *= moveLimiter;
         }
-    }
-
-    void MoveFoV()
-    {
-        // fieldOfView.SetOrigin(transform.position);
-        // fieldOfView.SetAimDirection((attentionCircle.position - transform.position).normalized);
     }
 
     void FixedUpdate()
