@@ -24,11 +24,8 @@ public class FieldOfView : MonoBehaviour
     }
 
     void DrawFoV() {
-        // Get the position of the FieldOfView object
-        Vector3 origin = transform.position;
-
-        // Get the direction the player is looking (based on Attention)
-        Vector3 lookDir = (attention.position - origin).normalized;
+        Vector3 origin = transform.position;                        // Player position
+        Vector3 lookDir = (attention.position - origin).normalized;     // Player Rotation
 
         // Starting angle for the field of view
         float startingAngle = GetAngleFromVectorFloat(lookDir) + fov / 2f;
@@ -43,19 +40,16 @@ public class FieldOfView : MonoBehaviour
         int vertexIndex = 1;
         int triangleIndex = 0;
 
-        // Loop through each ray and calculate the vertices and triangles
         for (int i = 0; i <= rayCount; i++) {
             Vector3 vertex;
             Vector3 dir = GetVectorFromAngle(startingAngle);
 
-            // Perform a raycast in the calculated direction
             RaycastHit2D hit = Physics2D.Raycast(origin, dir, viewDistance, layerMask);
 
             if (hit.collider == null) {
                 // No hit, set the vertex at the max distance
                 vertex = dir * viewDistance;
             } else {
-                // Hit object, set the vertex at the hit point
                 vertex = (Vector3)hit.point - origin;
             }
 

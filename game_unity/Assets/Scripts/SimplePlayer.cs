@@ -41,10 +41,12 @@ public class SimplePlayer : MonoBehaviour
         {
             movement *= moveLimiter;
         }
+
+        movement *= runSpeed;
     }
 
     void FixedUpdate()
     {
-        body.linearVelocity = movement * runSpeed;
+        body.linearVelocity = movement;
     }
 }

@@ -688,8 +688,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   layerMask:
     serializedVersion: 2
-    m_Bits: 128
-  player: {fileID: 1229188475}
+    m_Bits: 1
+  fov: 103
+  viewDistance: 50
+  rayCount: 50
 --- !u!23 &588120818
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -756,7 +758,7 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 0}
+  m_Father: {fileID: 1229188481}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &633228711
 GameObject:
@@ -1452,6 +1454,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   attentionCircle: {fileID: 1128759709}
+  fieldOfView: {fileID: 588120817}
   runSpeed: 20
 --- !u!212 &1229188480
 SpriteRenderer:
@@ -1523,6 +1526,7 @@ Transform:
   m_Children:
   - {fileID: 1128759709}
   - {fileID: 1555484085}
+  - {fileID: 588120820}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!58 &1229188482
@@ -2085,4 +2089,3 @@ SceneRoots:
   - {fileID: 1229188481}
   - {fileID: 699487215}
   - {fileID: 822730579}
-  - {fileID: 588120820}

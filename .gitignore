@@ -13,3 +13,15 @@ export_presets.cfg
 .mono/
 data_*/
 mono_crash.*.json
+
+####################################
+
+# Unity
+CompTemplate/Library/*
+CompTemplate/Logs/*
+CompTemplate/Temp/*
+CompTemplate/Obj/*
+CompTemplate/Build/*
+CompTemplate/Builds/*
+CompTemplate/UserSettings/*
+CompTemplate/Packages/PackageCache/*
