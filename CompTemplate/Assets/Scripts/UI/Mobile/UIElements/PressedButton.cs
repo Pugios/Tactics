@@ -8,6 +8,8 @@ namespace Unity.Template.CompetitiveActionMultiplayer
     [UxmlElement]
     public partial class PressedButton : Toggle
     {
+        public new class UxmlFactory : UxmlFactory<PressedButton, UxmlTraits> { }
+
         bool m_HasPointer;
 
         public PressedButton()

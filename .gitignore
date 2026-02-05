@@ -17,11 +17,11 @@ mono_crash.*.json
 ####################################
 
 # Unity
-CompTemplate/Library/*
-CompTemplate/Logs/*
-CompTemplate/Temp/*
-CompTemplate/Obj/*
-CompTemplate/Build/*
-CompTemplate/Builds/*
-CompTemplate/UserSettings/*
-CompTemplate/Packages/PackageCache/*
+*/Library/*
+*/Logs/*
+*/Temp/*
+*/Obj/*
+*/Build/*
+*/Builds/*
+*/UserSettings/*
+*/Packages/PackageCache/*
