@@ -1,0 +1,24 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+    <ui:Style src="BuyMenu.uss" />
+    <ui:VisualElement name="buyMenuRoot" class="buy-menu-root">
+        <ui:Label text="BUY PHASE" class="title" />
+        <ui:Label name="credsLabel" text="CREDS: 800" class="creds-display" />
+        
+        <ui:VisualElement name="weaponsGrid" class="weapons-grid">
+            <ui:Button name="judgeBtn" class="weapon-button">
+                <ui:Label text="JUDGE" class="weapon-name" picking-mode="Ignore" />
+                <ui:Label text="1850" class="weapon-cost" picking-mode="Ignore" />
+            </ui:Button>
+            <ui:Button name="vandalBtn" class="weapon-button">
+                <ui:Label text="VANDAL" class="weapon-name" picking-mode="Ignore" />
+                <ui:Label text="2900" class="weapon-cost" picking-mode="Ignore" />
+            </ui:Button>
+            <ui:Button name="operatorBtn" class="weapon-button">
+                <ui:Label text="OPERATOR" class="weapon-name" picking-mode="Ignore" />
+                <ui:Label text="4700" class="weapon-cost" picking-mode="Ignore" />
+            </ui:Button>
+        </ui:VisualElement>
+        
+        <ui:Button name="closeBtn" text="CLOSE (B)" class="close-button" />
+    </ui:VisualElement>
+</ui:UXML>

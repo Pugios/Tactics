@@ -1,0 +1,24 @@
+/*
+2026-06-10 AI-Tag
+This was created with the help of Assistant, a Unity Artificial Intelligence product.
+*/
+.damage-indicator {
+    position: absolute;
+    color: #FFFFFF;
+    font-size: 24px;
+    -unity-font-style: bold;
+    -unity-text-align: middle-center;
+    white-space: nowrap;
+    /* Use translate to center the label on its position */
+    transform-origin: center;
+    translate: -50% -50%;
+}
+
+.damage-indicator--perfect {
+    color: #FFD700; /* Gold */
+    font-size: 32px;
+}
+
+.damage-indicator--wallbang {
+    color: #AAAAAA;
+}

@@ -1,0 +1,70 @@
+/*
+2026-05-26 AI-Tag
+This was created with the help of Assistant, a Unity Artificial Intelligence product.
+*/
+.buy-menu-root {
+    flex-grow: 1;
+    background-color: rgba(0, 0, 0, 0.8);
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+
+.title {
+    font-size: 32px;
+    color: white;
+    margin-bottom: 20px;
+}
+
+.creds-display {
+    font-size: 24px;
+    color: #ffd700;
+    margin-bottom: 20px;
+}
+
+.weapons-grid {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.weapon-button {
+    width: 200px;
+    height: 120px;
+    background-color: #333;
+    border-width: 2px;
+    border-color: #555;
+    margin: 10px;
+    padding: 10px;
+    border-radius: 5px;
+    transition-property: background-color;
+    transition-duration: 0.2s;
+}
+
+.weapon-button:hover {
+    background-color: #444;
+}
+
+.weapon-button:active {
+    background-color: #222;
+}
+
+.weapon-name {
+    font-size: 20px;
+    color: white;
+    -unity-font-style: bold;
+}
+
+.weapon-cost {
+    font-size: 16px;
+    color: #ccc;
+    margin-top: auto;
+}
+
+.close-button {
+    margin-top: 30px;
+    padding: 10px 20px;
+    background-color: #900;
+    color: white;
+    border-radius: 5px;
+}
