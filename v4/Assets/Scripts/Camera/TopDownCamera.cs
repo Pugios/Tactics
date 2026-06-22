@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using System.Collections;
 
-namespace ValorantTrainer.Camera
+namespace Tactics.Camera
 {
     public class TopDownCamera : MonoBehaviour
     {

@@ -1,9 +1,9 @@
 using UnityEngine;
 using System;
 using System.Collections;
-using ValorantTrainer.Economy;
+using Tactics.Economy;
 
-namespace ValorantTrainer.Core
+namespace Tactics.Core
 {
     public enum GameState { BuyPhase, RoundActive, RoundEnd }
 

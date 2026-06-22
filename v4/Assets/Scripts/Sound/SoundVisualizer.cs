@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace ValorantTrainer.Sound
+namespace Tactics.Sound
 {
     [RequireComponent(typeof(LineRenderer), typeof(SoundEmitter))]
     public class SoundVisualizer : MonoBehaviour

@@ -126,7 +126,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 329cf4443d1f0394982ab4c234d68ca1, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ValorantTrainer.Objectives.Spike
+  m_EditorClassIdentifier: Assembly-CSharp::Tactics.Objectives.Spike
   timerDuration: 45
 --- !u!65 &7063175090227608224
 BoxCollider:
@@ -160,5 +160,5 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 89b6b67146d022a40b32d52c4fd3bfe4, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ValorantTrainer.Vision.VisibleEntity
+  m_EditorClassIdentifier: Assembly-CSharp::Tactics.Vision.VisibleEntity
   visualRoot: {fileID: 0}

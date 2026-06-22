@@ -1,0 +1,12 @@
+{
+    "asset": "779cae60cde9d8241b5a36a4323eed94",
+    "fileName": "019ed4d3-48a7-7f58-bd3a-eb08e9685611_Preview.png",
+    "prompt": "A simple character Texture that covers the Capsule Player Geometry",
+    "negativePrompt": "",
+    "model": "gemini-3.1-flash-texture",
+    "modelName": "Gemini 3.1 Nano Banana 2",
+    "customSeed": 2108971767,
+    "w3CTraceId": "",
+    "feedback": 0,
+    "refinementMode": "Generation"
+}

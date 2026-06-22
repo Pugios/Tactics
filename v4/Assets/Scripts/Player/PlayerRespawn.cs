@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace ValorantTrainer.Player
+namespace Tactics.Player
 {
     public class PlayerRespawn : MonoBehaviour
     {

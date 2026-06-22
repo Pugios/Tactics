@@ -1,7 +1,5 @@
-Shader "Vision/VisionFogComposite"
+Shader "Tactics/VisionFogComposite"
 {
-    // Fullscreen pass driven by VisionFogRenderPass.
-    // Darkens the camera image wherever the vision mask is black.
     SubShader
     {
         Tags { "RenderType" = "Opaque" "RenderPipeline" = "UniversalPipeline" }
@@ -16,59 +14,88 @@ Shader "Vision/VisionFogComposite"
             HLSLPROGRAM
             #pragma vertex Vert
             #pragma fragment Frag
+            #pragma multi_compile _ VISION_DEBUG_SHOW_MASK
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.core/Runtime/Utilities/Blit.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/ShaderVariablesFunctions.hlsl"
 
-            TEXTURE2D(_VisionMaskTex);
-            float4 _VisionMaskTex_TexelSize; // auto-filled by Unity (x = 1/width, y = 1/height)
+            TEXTURE2D_X(_VisionSceneDepth);
+            SAMPLER(sampler_VisionSceneDepth);
 
             float _FogStrength;
-            float _FogSoftness; // blur radius in mask texels; 0 = hard edge everywhere
+            float _VisionHasValidMask;
 
-            // Mask channels: R = coverage, G = blur allowance (0 near the cone's
-            // apex side edges, 1 in the interior). The blur is applied selectively:
-            // side edges stay sharp, the cone base and interior slivers are diffused.
-            // Purely visual: gameplay visibility comes from VisionSystem raycasts.
-            half2 BlurMask(float2 uv)
+            int _VisionFootprintVertCount;
+            float4 _VisionFootprintVerts[64];
+
+            bool IsBackgroundDepth(float rawDepth)
             {
-                float2 o = _VisionMaskTex_TexelSize.xy * _FogSoftness;
+#if UNITY_REVERSED_Z
+                return rawDepth < 1e-4;
+#else
+                return rawDepth > 1.0 - 1e-4;
+#endif
+            }
 
-                half2 m = SAMPLE_TEXTURE2D(_VisionMaskTex, sampler_LinearClamp, uv).rg * 4.0h;
-                m += SAMPLE_TEXTURE2D(_VisionMaskTex, sampler_LinearClamp, uv + float2( o.x, 0)).rg * 2.0h;
-                m += SAMPLE_TEXTURE2D(_VisionMaskTex, sampler_LinearClamp, uv + float2(-o.x, 0)).rg * 2.0h;
-                m += SAMPLE_TEXTURE2D(_VisionMaskTex, sampler_LinearClamp, uv + float2(0,  o.y)).rg * 2.0h;
-                m += SAMPLE_TEXTURE2D(_VisionMaskTex, sampler_LinearClamp, uv + float2(0, -o.y)).rg * 2.0h;
-                m += SAMPLE_TEXTURE2D(_VisionMaskTex, sampler_LinearClamp, uv + float2( o.x,  o.y)).rg;
-                m += SAMPLE_TEXTURE2D(_VisionMaskTex, sampler_LinearClamp, uv + float2(-o.x,  o.y)).rg;
-                m += SAMPLE_TEXTURE2D(_VisionMaskTex, sampler_LinearClamp, uv + float2( o.x, -o.y)).rg;
-                m += SAMPLE_TEXTURE2D(_VisionMaskTex, sampler_LinearClamp, uv + float2(-o.x, -o.y)).rg;
+            bool PointInPolygonXZ(float2 p)
+            {
+                int count = _VisionFootprintVertCount;
+                if (count < 3)
+                    return false;
 
-                return m / 16.0h;
+                bool inside = false;
+
+                [loop]
+                for (int i = 0; i < count; i++)
+                {
+                    int j = i - 1;
+                    if (j < 0)
+                        j = count - 1;
+
+                    float2 vi = _VisionFootprintVerts[i].xy;
+                    float2 vj = _VisionFootprintVerts[j].xy;
+
+                    bool yStraddle = (vi.y > p.y) != (vj.y > p.y);
+                    if (!yStraddle)
+                        continue;
+
+                    float t = (p.y - vi.y) / (vj.y - vi.y);
+                    float xIntersect = vi.x + t * (vj.x - vi.x);
+                    if (p.x < xIntersect)
+                        inside = !inside;
+                }
+
+                return inside;
+            }
+
+            half SampleWorldFootprintMask(float3 worldPosition)
+            {
+                if (_VisionHasValidMask < 0.5h)
+                    return 0.0h;
+
+                return PointInPolygonXZ(worldPosition.xz) ? 1.0h : 0.0h;
             }
 
             half4 Frag(Varyings input) : SV_Target
             {
                 float2 uv = input.texcoord;
-                half4 sceneColor = SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_LinearClamp, uv);
+                float deviceDepth = SAMPLE_TEXTURE2D_X(_VisionSceneDepth, sampler_VisionSceneDepth, uv).r;
 
-                half sharpMask = SAMPLE_TEXTURE2D(_VisionMaskTex, sampler_LinearClamp, uv).r;
-                half mask = sharpMask;
-
-                if (_FogSoftness > 0.0)
+                half mask = 0.0h;
+                if (!IsBackgroundDepth(deviceDepth))
                 {
-                    half2 blurred = BlurMask(uv);
-
-                    // How "blurrable" is this neighborhood? Normalize the blurred
-                    // allowance by the blurred coverage so the base edge (interior
-                    // G=1 next to outside G=0) still counts as fully blurrable.
-                    half allowance = saturate(blurred.g / max(blurred.r, 0.004h));
-                    mask = lerp(sharpMask, blurred.r, allowance);
+                    float3 worldPosition = ComputeWorldSpacePosition(uv, deviceDepth, UNITY_MATRIX_I_VP);
+                    mask = SampleWorldFootprintMask(worldPosition);
                 }
 
-                // mask = 1 inside the cone (full brightness), 0 outside (darkened).
-                half brightness = lerp(1.0h - _FogStrength, 1.0h, mask);
-                return half4(sceneColor.rgb * brightness, sceneColor.a);
+#if defined(VISION_DEBUG_SHOW_MASK)
+                return half4(mask, mask, mask, 1.0h);
+#endif
+
+                half4 sceneColor = SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_LinearClamp, uv);
+                half visibility = 1.0h - (half)_FogStrength * (1.0h - mask);
+                return half4(sceneColor.rgb * visibility, sceneColor.a);
             }
             ENDHLSL
         }

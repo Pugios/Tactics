@@ -49,7 +49,7 @@ MonoBehaviour:
     failOperation: 0
     zFailOperation: 0
   m_ShadowTransparentReceive: 1
-  m_RenderingMode: 2
+  m_RenderingMode: 0
   m_DepthPrimingMode: 0
   m_CopyDepthMode: 0
   m_DepthAttachmentFormat: 0
@@ -67,16 +67,13 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 6875a04855133ae4e9551363eda20f9d, type: 3}
   m_Name: VisionFogRendererFeature
-  m_EditorClassIdentifier: Assembly-CSharp::ValorantTrainer.Vision.VisionFogRendererFeature
+  m_EditorClassIdentifier: Tactics.Vision::Tactics.Vision.VisionFogRendererFeature
   m_Active: 1
   settings:
-    fogCompositeShader: {fileID: 4800000, guid: e2bc7d18fdb42be41aa6122f98cecc94, type: 3}
-    fogStrength: 0.9
-    fogEdgeSoftness: 5.61
-    maskDownscale: 1
-    visionConeLayer:
-      serializedVersion: 2
-      m_Bits: 256
+    compositeFogShader: {fileID: 4800000, guid: a1bc7d18fdb42be41aa6122f98cecc96, type: 3}
+    fallbackFogStrength: 0.9
+    maskTextureResolution: 512
+    debugShowMask: 0
 --- !u!114 &7833122117494664109
 MonoBehaviour:
   m_ObjectHideFlags: 0

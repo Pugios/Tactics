@@ -1,5 +1,5 @@
 # Project Overview
-- Game Title: Valorant Trainer
+- Game Title: Tactics
 - High-Level Concept: Top-down tactical shooter trainer focusing on precise aiming and wall penetration.
 - Players: Single player.
 - Inspiration: Valorant.

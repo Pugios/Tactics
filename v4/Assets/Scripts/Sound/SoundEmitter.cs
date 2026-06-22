@@ -1,7 +1,7 @@
 using UnityEngine;
 using System;
 
-namespace ValorantTrainer.Sound
+namespace Tactics.Sound
 {
     public class SoundEmitter : MonoBehaviour
     {

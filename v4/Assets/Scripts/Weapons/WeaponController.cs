@@ -1,8 +1,8 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
-using ValorantTrainer.Combat;
+using Tactics.Combat;
 
-namespace ValorantTrainer.Weapons
+namespace Tactics.Weapons
 {
     public class WeaponController : MonoBehaviour
     {
@@ -15,7 +15,7 @@ namespace ValorantTrainer.Weapons
         private float lastFireTime;
         private int currentAmmo;
         private bool isReloading;
-        private ValorantTrainer.Sound.SoundEmitter soundEmitter;
+        private Tactics.Sound.SoundEmitter soundEmitter;
 
         public int CurrentAmmo => currentAmmo;
         public WeaponData CurrentWeapon => currentWeapon;
@@ -25,7 +25,7 @@ namespace ValorantTrainer.Weapons
         {
             attackAction = InputSystem.actions.FindAction("Attack");
             reloadAction = InputSystem.actions.FindAction("Reload");
-            soundEmitter = GetComponent<ValorantTrainer.Sound.SoundEmitter>();
+            soundEmitter = GetComponent<Tactics.Sound.SoundEmitter>();
             if (currentWeapon != null)
             {
                 currentAmmo = currentWeapon.magazineSize;

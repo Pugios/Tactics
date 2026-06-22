@@ -1,7 +1,8 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using Tactics.Vision;
 
-namespace ValorantTrainer.Player
+namespace Tactics.Player
 {
     [RequireComponent(typeof(CharacterController))]
     public class PlayerController : MonoBehaviour
@@ -25,13 +26,13 @@ namespace ValorantTrainer.Player
         private bool isCrouching;
         private float verticalVelocity;
 
-        private ValorantTrainer.Sound.SoundEmitter soundEmitter;
+        private Tactics.Sound.SoundEmitter soundEmitter;
 
         private void Awake()
         {
             characterController = GetComponent<CharacterController>();
             mainCamera = UnityEngine.Camera.main;
-            soundEmitter = GetComponent<ValorantTrainer.Sound.SoundEmitter>();
+            soundEmitter = GetComponent<Tactics.Sound.SoundEmitter>();
         }
 
         private void Start()
@@ -53,7 +54,8 @@ namespace ValorantTrainer.Player
         {
             if (centerCameraAction != null && centerCameraAction.IsPressed())
             {
-                var tdCam = mainCamera.GetComponent<ValorantTrainer.Camera.TopDownCamera>();
+                // tdCam = Script attached to Main Camera | Handles Rotation/Movement
+                var tdCam = mainCamera.GetComponent<Tactics.Camera.TopDownCamera>();
                 if (tdCam != null)
                 {
                     if (centerCameraAction.WasPressedThisFrame())
@@ -62,6 +64,7 @@ namespace ValorantTrainer.Player
                         Vector3 targetDirection = transform.forward;
                         Ray ray = mainCamera.ScreenPointToRay(Mouse.current.position.ReadValue());
                         Plane groundPlane = new Plane(Vector3.up, transform.position);
+                        // Ray against virtual infinite ground plane to allow rotation even when aiming at nothing/walls
                         if (groundPlane.Raycast(ray, out float enter))
                         {
                             Vector3 hitPoint = ray.GetPoint(enter);
@@ -89,17 +92,21 @@ namespace ValorantTrainer.Player
 
         [Header("Vision")]
         [SerializeField] private Transform visionOrigin;
+        [SerializeField] private float eyeHeight = 1.5f;
+
+        public Transform VisionOrigin => visionOrigin;
         
         private Vector3 lookTarget;
         public Vector3 LookTarget => lookTarget;
 
         private void HandleRotation()
         {
+            int AimRaycastMask = Physics.AllLayers & ~VisionLayerMasks.VisionGroundOnly;
             Ray ray = mainCamera.ScreenPointToRay(Mouse.current.position.ReadValue());
             // Raycast against everything to find the 3D point under mouse
-            if (Physics.Raycast(ray, out RaycastHit hit, 1000f))
+            if (Physics.Raycast(ray, out RaycastHit hit, 1000f, AimRaycastMask))
             {
-                lookTarget = hit.point + Vector3.up * 1.5f;
+                lookTarget = hit.point + Vector3.up * eyeHeight;
                 
                 // Body rotation (Y only)
                 Vector3 direction = hit.point - transform.position;
@@ -122,12 +129,12 @@ namespace ValorantTrainer.Player
             }
             else
             {
-                // Fallback to ground plane if no hit
+                // Fallback to virtual infinite ground plane if no hit
                 Plane groundPlane = new Plane(Vector3.up, transform.position);
                 if (groundPlane.Raycast(ray, out float enter))
                 {
                     Vector3 hitPoint = ray.GetPoint(enter);
-                    lookTarget = hitPoint + Vector3.up * 1.5f;
+                    lookTarget = hitPoint + Vector3.up * eyeHeight;
                     
                     Vector3 direction = hitPoint - transform.position;
                     direction.y = 0;

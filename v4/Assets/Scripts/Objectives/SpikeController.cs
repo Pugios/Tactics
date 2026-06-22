@@ -1,8 +1,8 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
-using ValorantTrainer.Core;
+using Tactics.Core;
 
-namespace ValorantTrainer.Objectives
+namespace Tactics.Objectives
 {
     public class SpikeController : MonoBehaviour
     {

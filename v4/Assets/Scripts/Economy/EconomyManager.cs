@@ -1,7 +1,7 @@
 using UnityEngine;
 using System;
 
-namespace ValorantTrainer.Economy
+namespace Tactics.Economy
 {
     public class EconomyManager : MonoBehaviour
     {

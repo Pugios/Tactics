@@ -1,12 +1,12 @@
 using UnityEngine;
 
-namespace ValorantTrainer.Weapons
+namespace Tactics.Weapons
 {
     public enum WeaponType { Sidearm, SMG, Shotgun, Rifle, Sniper, Melee }
     public enum FireMode { Semi, Auto, Burst }
     public enum WallPenetration { Low, Medium, High }
 
-    [CreateAssetMenu(fileName = "NewWeapon", menuName = "Valorant Trainer/Weapon Data")]
+    [CreateAssetMenu(fileName = "NewWeapon", menuName = "Tactics/Weapon Data")]
     public class WeaponData : ScriptableObject
     {
         [Header("General")]

@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace ValorantTrainer.Objectives
+namespace Tactics.Objectives
 {
     public class SpikeSite : MonoBehaviour
     {

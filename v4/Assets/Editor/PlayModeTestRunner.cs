@@ -1,7 +1,7 @@
 using UnityEditor;
 using UnityEngine;
 using System.Collections.Generic;
-using ValorantTrainer.Player;
+using Tactics.Player;
 
 namespace Unity.AI.Assistant.PlayModeTest
 {

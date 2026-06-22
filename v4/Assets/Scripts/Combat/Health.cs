@@ -1,7 +1,7 @@
 using UnityEngine;
 using System;
 
-namespace ValorantTrainer.Combat
+namespace Tactics.Combat
 {
     public class Health : MonoBehaviour
     {

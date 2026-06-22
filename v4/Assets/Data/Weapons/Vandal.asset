@@ -11,7 +11,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 334cdfe71455f974cbe05a9ab3beaaff, type: 3}
   m_Name: Vandal
-  m_EditorClassIdentifier: Assembly-CSharp::ValorantTrainer.Weapons.WeaponData
+  m_EditorClassIdentifier: Assembly-CSharp::Tactics.Weapons.WeaponData
   weaponName: Vandal
   type: 3
   cost: 2900

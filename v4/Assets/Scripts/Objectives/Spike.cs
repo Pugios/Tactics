@@ -1,7 +1,7 @@
 using UnityEngine;
 using System;
 
-namespace ValorantTrainer.Objectives
+namespace Tactics.Objectives
 {
     public class Spike : MonoBehaviour
     {
