@@ -97,63 +97,51 @@ namespace Tactics.Player
         public Transform VisionOrigin => visionOrigin;
         
         private Vector3 lookTarget;
+        private Vector3 aimGroundPoint;
+
         public Vector3 LookTarget => lookTarget;
+        public Vector3 AimGroundPoint => aimGroundPoint;
 
         private void HandleRotation()
         {
-            int AimRaycastMask = Physics.AllLayers & ~VisionLayerMasks.VisionGroundOnly;
             Ray ray = mainCamera.ScreenPointToRay(Mouse.current.position.ReadValue());
-            // Raycast against everything to find the 3D point under mouse
-            if (Physics.Raycast(ray, out RaycastHit hit, 1000f, AimRaycastMask))
+            if (!TryGetMouseGroundPoint(ray, out Vector3 groundPoint))
+                return;
+
+            lookTarget = groundPoint + Vector3.up * eyeHeight;
+            aimGroundPoint = groundPoint;
+
+            Vector3 direction = groundPoint - transform.position;
+            direction.y = 0;
+
+            if (direction.sqrMagnitude > 0.01f)
+                transform.rotation = Quaternion.LookRotation(direction);
+
+            if (visionOrigin != null)
             {
-                lookTarget = hit.point + Vector3.up * eyeHeight;
-                
-                // Body rotation (Y only)
-                Vector3 direction = hit.point - transform.position;
-                direction.y = 0;
-
-                if (direction.sqrMagnitude > 0.01f)
-                {
-                    transform.rotation = Quaternion.LookRotation(direction);
-                }
-
-                // Vision origin rotation (3D)
-                if (visionOrigin != null)
-                {
-                    Vector3 visionDir = lookTarget - visionOrigin.position;
-                    if (visionDir.sqrMagnitude > 0.01f)
-                    {
-                        visionOrigin.rotation = Quaternion.LookRotation(visionDir);
-                    }
-                }
+                Vector3 visionDir = lookTarget - visionOrigin.position;
+                if (visionDir.sqrMagnitude > 0.01f)
+                    visionOrigin.rotation = Quaternion.LookRotation(visionDir);
             }
-            else
+        }
+
+        private bool TryGetMouseGroundPoint(Ray ray, out Vector3 groundPoint)
+        {
+            if (Physics.Raycast(ray, out RaycastHit hit, 1000f, VisionLayerMasks.GroundOnly))
             {
-                // Fallback to virtual infinite ground plane if no hit
-                Plane groundPlane = new Plane(Vector3.up, transform.position);
-                if (groundPlane.Raycast(ray, out float enter))
-                {
-                    Vector3 hitPoint = ray.GetPoint(enter);
-                    lookTarget = hitPoint + Vector3.up * eyeHeight;
-                    
-                    Vector3 direction = hitPoint - transform.position;
-                    direction.y = 0;
-
-                    if (direction.sqrMagnitude > 0.01f)
-                    {
-                        transform.rotation = Quaternion.LookRotation(direction);
-                    }
-                    
-                    if (visionOrigin != null)
-                    {
-                        Vector3 visionDir = lookTarget - visionOrigin.position;
-                        if (visionDir.sqrMagnitude > 0.01f)
-                        {
-                            visionOrigin.rotation = Quaternion.LookRotation(visionDir);
-                        }
-                    }
-                }
+                groundPoint = hit.point;
+                return true;
             }
+
+            Plane groundPlane = new Plane(Vector3.up, transform.position);
+            if (groundPlane.Raycast(ray, out float enter))
+            {
+                groundPoint = ray.GetPoint(enter);
+                return true;
+            }
+
+            groundPoint = Vector3.zero;
+            return false;
         }
 
         private void HandleMovement()

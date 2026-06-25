@@ -29,6 +29,7 @@ namespace Tactics.Vision
         public float EdgeMatchTolerance { get; }
         public int MaxEdgeRefinements { get; }
         public int BoundaryRayCount { get; }
+        public int MaxVisionGroundPasses { get; }
 
         public VisionConfig(
             float viewAngle,
@@ -51,7 +52,8 @@ namespace Tactics.Vision
             float longSightRefineDistance = 20f,
             float edgeMatchTolerance = 5f,
             int maxEdgeRefinements = 3,
-            int boundaryRayCount = 10)
+            int boundaryRayCount = 10,
+            int maxVisionGroundPasses = 5)
         {
             ViewAngle = viewAngle;
             VerticalHalfAngle = verticalHalfAngle;
@@ -74,6 +76,7 @@ namespace Tactics.Vision
             EdgeMatchTolerance = edgeMatchTolerance;
             MaxEdgeRefinements = maxEdgeRefinements;
             BoundaryRayCount = boundaryRayCount;
+            MaxVisionGroundPasses = maxVisionGroundPasses;
         }
     }
 }

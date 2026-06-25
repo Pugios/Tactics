@@ -49,10 +49,14 @@ namespace Tactics.Vision
         [SerializeField] private float longSightRefineDistance = 20f;
         [SerializeField] private float edgeMatchTolerance = 5f;
         [SerializeField, Range(0, 8)] private int maxEdgeRefinements = 3;
+        [Tooltip("Maximum consecutive VisionGround hits per boundary ray before stopping.")]
+        [SerializeField, Range(1, 32)] private int maxVisionGroundPasses = 5;
 
         [Header("Debug")]
-        [SerializeField] private bool drawDebugRays;
-        [SerializeField] private bool drawDebugPoints;
+        [SerializeField] private bool drawDebugAim;
+        [SerializeField] private bool drawDebugFootprint = true;
+        [SerializeField, FormerlySerializedAs("drawDebugRays")] private bool drawDebugBoundaryResult;
+        [SerializeField] private bool drawDebugRayMarch;
         [SerializeField] private bool debugShowMaskTexture;
 
         private PlayerController playerController;
@@ -95,7 +99,8 @@ namespace Tactics.Vision
             longSightRefineDistance,
             edgeMatchTolerance,
             maxEdgeRefinements,
-            boundaryRayCount);
+            boundaryRayCount,
+            maxVisionGroundPasses);
 
         private void Awake()
         {
@@ -142,6 +147,7 @@ namespace Tactics.Vision
             edgeMatchTolerance = Mathf.Max(0f, edgeMatchTolerance);
             maxEdgeRefinements = Mathf.Max(0, maxEdgeRefinements);
             boundaryRayCount = Mathf.Clamp(boundaryRayCount, 2, 64);
+            maxVisionGroundPasses = Mathf.Clamp(maxVisionGroundPasses, 1, 32);
         }
 
         private void LateUpdate()
@@ -149,6 +155,9 @@ namespace Tactics.Vision
             RefreshAimState();
             RebuildFootprint();
             PublishFootprintPolygon();
+            DrawAimDebugLines();
+            DrawBoundaryResultDebugLines();
+            DrawRayMarchDebugLines();
         }
 
         public bool IsPointVisible(Vector3 worldPoint)
@@ -251,25 +260,145 @@ namespace Tactics.Vision
             renderer.enabled = false;
         }
 
-        private void OnDrawGizmosSelected()
+        private void DrawBoundaryResultDebugLines()
         {
-            if (playerController == null)
-                playerController = GetComponent<PlayerController>();
+            if (!drawDebugBoundaryResult || !Application.isPlaying)
+                return;
 
-            Transform origin = playerController != null ? playerController.VisionOrigin : null;
+            Color resultColor = new Color(1f, 0.85f, 0.2f, 0.95f);
+            Color missColor = new Color(1f, 0.35f, 0.35f, 0.35f);
+
+            for (int i = 0; i < visibleAreaBuilder.DebugBoundaryResultRays.Count; i++)
+            {
+                (Vector3 start, Vector3 end) = visibleAreaBuilder.DebugBoundaryResultRays[i];
+                Debug.DrawLine(start, end, resultColor);
+            }
+
+            for (int i = 0; i < visibleAreaBuilder.DebugBoundaryMissRays.Count; i++)
+            {
+                (Vector3 start, Vector3 end) = visibleAreaBuilder.DebugBoundaryMissRays[i];
+                Debug.DrawLine(start, end, missColor);
+            }
+        }
+
+        private void DrawRayMarchDebugLines()
+        {
+            if (!drawDebugRayMarch || !Application.isPlaying)
+                return;
+
+            Color marchHitColor = new Color(0.2f, 0.85f, 1f, 0.95f);
+            Color marchMissColor = new Color(0.2f, 0.85f, 1f, 0.35f);
+            Color visionGroundColor = new Color(1f, 0.55f, 0.1f, 0.95f);
+            Color solidColor = new Color(1f, 0.25f, 0.25f, 0.95f);
+            Color endpointColor = new Color(0.2f, 1f, 0.35f, 0.95f);
+
+            for (int i = 0; i < visibleAreaBuilder.DebugMarchCasts.Count; i++)
+            {
+                VisibleAreaBuilder.DebugMarchCast cast = visibleAreaBuilder.DebugMarchCasts[i];
+                Debug.DrawLine(cast.From, cast.To, cast.Missed ? marchMissColor : marchHitColor);
+            }
+
+            for (int i = 0; i < visibleAreaBuilder.DebugVisionGroundHits.Count; i++)
+                DebugDrawWireSphere(visibleAreaBuilder.DebugVisionGroundHits[i], 0.18f, visionGroundColor);
+
+            for (int i = 0; i < visibleAreaBuilder.DebugSolidIntercepts.Count; i++)
+                DebugDrawWireSphere(visibleAreaBuilder.DebugSolidIntercepts[i], 0.12f, solidColor);
+
+            for (int i = 0; i < visibleAreaBuilder.DebugDistinctEndpoints.Count; i++)
+                DebugDrawWireSphere(visibleAreaBuilder.DebugDistinctEndpoints[i], 0.1f, endpointColor);
+        }
+
+        private void DrawAimDebugLines()
+        {
+            if (!drawDebugAim || !Application.isPlaying || playerController == null)
+                return;
+
+            Transform origin = playerController.VisionOrigin;
             if (origin == null)
                 return;
 
-            Gizmos.color = Color.cyan;
-            Gizmos.DrawWireSphere(origin.position, 0.15f);
-            Gizmos.DrawRay(origin.position, origin.forward * 3f);
+            Vector3 aimStart = origin.position;
+            Vector3 groundPoint = playerController.AimGroundPoint;
+            Vector3 targetPoint = playerController.LookTarget;
 
-            if (footprintMesh == null || footprintMeshFilter == null)
-                return;
+            Debug.DrawLine(aimStart, targetPoint, Color.magenta);
+            Debug.DrawLine(groundPoint, targetPoint, Color.cyan);
+            DebugDrawWireSphere(groundPoint, 0.2f, new Color(0.2f, 1f, 1f, 0.9f));
+            DebugDrawWireSphere(targetPoint, 0.15f, Color.magenta);
+        }
 
+        private static void DebugDrawWireSphere(Vector3 center, float radius, Color color)
+        {
+            const int segments = 12;
+            float step = 360f / segments;
+            Vector3 prevX = center + Vector3.right * radius;
+
+            for (int i = 1; i <= segments; i++)
+            {
+                float angle = step * i * Mathf.Deg2Rad;
+                Vector3 point = center + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * radius;
+                Debug.DrawLine(prevX, point, color);
+                prevX = point;
+            }
+
+            prevX = center + Vector3.up * radius;
+            for (int i = 1; i <= segments; i++)
+            {
+                float angle = step * i * Mathf.Deg2Rad;
+                Vector3 point = center + new Vector3(0f, Mathf.Cos(angle), Mathf.Sin(angle)) * radius;
+                Debug.DrawLine(prevX, point, color);
+                prevX = point;
+            }
+        }
+
+        private void DrawRayMarchGizmos()
+        {
+            Color marchHitColor = new Color(0.2f, 0.85f, 1f, 0.95f);
+            Color marchMissColor = new Color(0.2f, 0.85f, 1f, 0.35f);
+            Color visionGroundColor = new Color(1f, 0.55f, 0.1f, 0.95f);
+            Color solidColor = new Color(1f, 0.25f, 0.25f, 0.95f);
+            Color endpointColor = new Color(0.2f, 1f, 0.35f, 0.95f);
+
+            for (int i = 0; i < visibleAreaBuilder.DebugMarchCasts.Count; i++)
+            {
+                VisibleAreaBuilder.DebugMarchCast cast = visibleAreaBuilder.DebugMarchCasts[i];
+                Gizmos.color = cast.Missed ? marchMissColor : marchHitColor;
+                Gizmos.DrawLine(cast.From, cast.To);
+            }
+
+            Gizmos.color = visionGroundColor;
+            for (int i = 0; i < visibleAreaBuilder.DebugVisionGroundHits.Count; i++)
+                Gizmos.DrawSphere(visibleAreaBuilder.DebugVisionGroundHits[i], 0.18f);
+
+            Gizmos.color = solidColor;
+            for (int i = 0; i < visibleAreaBuilder.DebugSolidIntercepts.Count; i++)
+                Gizmos.DrawSphere(visibleAreaBuilder.DebugSolidIntercepts[i], 0.12f);
+
+            Gizmos.color = endpointColor;
+            for (int i = 0; i < visibleAreaBuilder.DebugDistinctEndpoints.Count; i++)
+                Gizmos.DrawSphere(visibleAreaBuilder.DebugDistinctEndpoints[i], 0.1f);
+        }
+
+        private void DrawBoundaryResultGizmos()
+        {
+            Gizmos.color = new Color(1f, 0.85f, 0.2f, 0.95f);
+            for (int i = 0; i < visibleAreaBuilder.DebugBoundaryResultRays.Count; i++)
+            {
+                (Vector3 start, Vector3 end) = visibleAreaBuilder.DebugBoundaryResultRays[i];
+                Gizmos.DrawLine(start, end);
+            }
+
+            Gizmos.color = new Color(1f, 0.35f, 0.35f, 0.35f);
+            for (int i = 0; i < visibleAreaBuilder.DebugBoundaryMissRays.Count; i++)
+            {
+                (Vector3 start, Vector3 end) = visibleAreaBuilder.DebugBoundaryMissRays[i];
+                Gizmos.DrawLine(start, end);
+            }
+        }
+
+        private void DrawFootprintGizmos(Transform meshTransform, Vector3[] verts)
+        {
             Gizmos.color = new Color(0.2f, 1f, 0.4f, 0.85f);
-            Transform meshTransform = footprintMeshFilter.transform;
-            Vector3[] verts = footprintMesh.vertices;
 
             for (int submesh = 0; submesh < footprintMesh.subMeshCount; submesh++)
             {
@@ -298,44 +427,60 @@ namespace Tactics.Vision
                     }
                 }
             }
+        }
 
-            if (!drawDebugRays && !drawDebugPoints)
+        private void OnDrawGizmosSelected()
+        {
+            if (playerController == null)
+                playerController = GetComponent<PlayerController>();
+
+            Transform origin = playerController != null ? playerController.VisionOrigin : null;
+            if (origin == null)
                 return;
 
-            if (drawDebugRays)
-            {
-                Gizmos.color = new Color(1f, 0.85f, 0.2f, 0.85f);
-                for (int i = 0; i < visibleAreaBuilder.DebugHitRays.Count; i++)
-                {
-                    (Vector3 start, Vector3 end) = visibleAreaBuilder.DebugHitRays[i];
-                    Gizmos.DrawLine(start, end);
-                }
+            Gizmos.color = Color.cyan;
+            Gizmos.DrawWireSphere(origin.position, 0.15f);
+            Gizmos.DrawRay(origin.position, origin.forward * 3f);
 
-                Gizmos.color = new Color(1f, 0.35f, 0.35f, 0.25f);
-                for (int i = 0; i < visibleAreaBuilder.DebugMissRays.Count; i++)
-                {
-                    (Vector3 start, Vector3 end) = visibleAreaBuilder.DebugMissRays[i];
-                    Gizmos.DrawLine(start, end);
-                }
+            if (drawDebugAim && playerController != null)
+            {
+                Vector3 groundPoint = playerController.AimGroundPoint;
+                Vector3 targetPoint = playerController.LookTarget;
+
+                Gizmos.color = Color.magenta;
+                Gizmos.DrawLine(origin.position, targetPoint);
+                Gizmos.DrawWireSphere(targetPoint, 0.15f);
+
+                Gizmos.color = Color.cyan;
+                Gizmos.DrawLine(groundPoint, targetPoint);
+                Gizmos.DrawWireSphere(groundPoint, 0.2f);
             }
 
-            if (drawDebugPoints)
+            if (drawDebugRayMarch)
+                DrawRayMarchGizmos();
+
+            if (drawDebugBoundaryResult)
+                DrawBoundaryResultGizmos();
+
+            if (footprintMesh == null || footprintMeshFilter == null)
+                return;
+
+            if (drawDebugFootprint)
             {
-                Gizmos.color = Color.yellow;
-                for (int i = 0; i < visibleAreaBuilder.DebugAcceptedPoints.Count; i++)
-                    Gizmos.DrawSphere(visibleAreaBuilder.DebugAcceptedPoints[i], 0.12f);
+                Transform meshTransform = footprintMeshFilter.transform;
+                DrawFootprintGizmos(meshTransform, footprintMesh.vertices);
             }
 
-            if (footprintMesh != null)
+#if UNITY_EDITOR
+            if (footprintMesh != null && drawDebugFootprint)
             {
                 Gizmos.color = Color.white;
                 Gizmos.DrawWireSphere(AimOrigin, 0.05f);
-#if UNITY_EDITOR
                 UnityEditor.Handles.Label(
                     AimOrigin + Vector3.up * 0.35f,
                     $"Footprint verts: {footprintMesh.vertexCount}, submeshes: {footprintMesh.subMeshCount}");
-#endif
             }
+#endif
         }
     }
 }

@@ -19,6 +19,9 @@ namespace Tactics.Vision
         public static LayerMask DefaultLos =>
             (1 << Wall) | (1 << Ground) | (1 << Prop) | (1 << Default);
 
+        /// <summary>DefaultLos plus VisionGround — footprint boundary ray targets.</summary>
+        public static LayerMask DefaultBoundaryRay => DefaultLos | VisionGroundOnly;
+
         public static LayerMask GroundOnly => 1 << Ground;
 
         public static LayerMask WallOnly => 1 << Wall;

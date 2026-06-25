@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.Rendering;
 using UnityEngine.SceneManagement;
 using Tactics.Vision;
 
@@ -84,9 +85,12 @@ namespace Tactics.Editor
             {
                 case MeshCollider meshCollider when meshCollider.sharedMesh != null:
                 {
+                    Mesh proxyMesh = CreateDoubleSidedMesh(meshCollider.sharedMesh, source.gameObject.name);
+                    Undo.RegisterCreatedObjectUndo(proxyMesh, "Generate Vision Ground");
+
                     var proxyCollider = proxyObject.AddComponent<MeshCollider>();
-                    proxyCollider.sharedMesh = meshCollider.sharedMesh;
-                    proxyCollider.convex = meshCollider.convex;
+                    proxyCollider.sharedMesh = proxyMesh;
+                    proxyCollider.convex = false;
                     return true;
                 }
                 case BoxCollider boxCollider:
@@ -168,6 +172,40 @@ namespace Tactics.Editor
             }
 
             return results;
+        }
+
+        private static Mesh CreateDoubleSidedMesh(Mesh source, string sourceObjectName)
+        {
+            var copy = Object.Instantiate(source);
+            copy.name = $"VisionGroundMesh_{sourceObjectName}";
+
+            if (copy.vertexCount > 65535)
+                copy.indexFormat = IndexFormat.UInt32;
+
+            for (int submesh = 0; submesh < copy.subMeshCount; submesh++)
+            {
+                if (copy.GetTopology(submesh) != MeshTopology.Triangles)
+                    continue;
+
+                int[] original = copy.GetTriangles(submesh);
+                if (original.Length == 0)
+                    continue;
+
+                int[] reversed = new int[original.Length];
+                for (int i = 0; i < original.Length; i += 3)
+                {
+                    reversed[i] = original[i];
+                    reversed[i + 1] = original[i + 2];
+                    reversed[i + 2] = original[i + 1];
+                }
+
+                var combined = new int[original.Length + reversed.Length];
+                original.CopyTo(combined, 0);
+                reversed.CopyTo(combined, original.Length);
+                copy.SetTriangles(combined, submesh);
+            }
+
+            return copy;
         }
 
         private static Transform FindExistingRoot()
