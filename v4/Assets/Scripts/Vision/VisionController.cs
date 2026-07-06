@@ -1,6 +1,7 @@
+using Tactics.Player;
 using UnityEngine;
 using UnityEngine.Serialization;
-using Tactics.Player;
+using static UnityEditorInternal.ReorderableList;
 
 namespace Tactics.Vision
 {
@@ -13,8 +14,8 @@ namespace Tactics.Vision
     public class VisionController : MonoBehaviour
     {
         [Header("Cone")]
-        [SerializeField, Range(1f, 180f)] private float viewAngle = 103f;
-        [SerializeField, Range(1f, 89f)] private float verticalHalfAngle = 80f;
+        [SerializeField, Range(1f, 180f)] private float horizontalViewAngle = 103f;
+        [SerializeField, Range(1f, 180f)] private float verticalViewAngle = 70.53f;
         [SerializeField] private float maxViewDistance = 500f;
 
         [Header("Heights")]
@@ -24,14 +25,10 @@ namespace Tactics.Vision
 
         [Header("Line Of Sight")]
         [SerializeField] private LayerMask losMask = VisionLayerMasks.DefaultLos;
-        [SerializeField] private LayerMask groundMask = VisionLayerMasks.GroundOnly;
-        [SerializeField] private LayerMask castMask = VisionLayerMasks.DefaultCast;
         [SerializeField] private float losSkinWidth = 0.05f;
 
         [Header("Sampling")]
-        [SerializeField] private int azimuthSamples = 64;
-        [SerializeField] private int elevationSamples = 12;
-        [SerializeField, FormerlySerializedAs("groundMeshOffset")] private float meshOffset = 0.05f;
+        [SerializeField] private float meshOffset = 0.05f;
 
         [Header("Fog")]
         [SerializeField, Range(0f, 1f)] private float fogStrength = 0.9f;
@@ -39,29 +36,31 @@ namespace Tactics.Vision
         [Header("Footprint")]
         [SerializeField] private MeshFilter footprintMeshFilter;
         [SerializeField] private Material footprintDrawMaterial;
-        [SerializeField] private bool createFootprintMeshIfMissing = true;
+
         [SerializeField, Range(2, 64)] private int boundaryRayCount = 10;
+        [SerializeField, Range(0, 10)] private int maxHorizontalEdgeRefinements = 5;
+        [SerializeField, Range(0, 4)] private int maxVerticalEdgeRefinements = 1;
+        [SerializeField, Range(1, 32)] private int maxVisionGroundPasses = 10;
+        [SerializeField, Range(3, 7)] private int sparseLedgeRayCount = 3;
+
         [SerializeField] private float edgeLengthDifferenceThreshold = 5f;
-        [Tooltip("Reference distance for scaling edge thresholds. Far hits use lower effective thresholds.")]
         [SerializeField] private float edgeLengthThresholdReferenceDistance = 10f;
         [SerializeField] private float edgeLengthDifferenceThresholdMin = 0.25f;
-        [Tooltip("When average hit distance exceeds this, always cast at least one mid-ray between adjacent samples.")]
         [SerializeField] private float longSightRefineDistance = 20f;
         [SerializeField] private float edgeMatchTolerance = 5f;
-        [SerializeField, Range(0, 8)] private int maxEdgeRefinements = 3;
-        [Tooltip("Maximum consecutive VisionGround hits per boundary ray before stopping.")]
-        [SerializeField, Range(1, 32)] private int maxVisionGroundPasses = 5;
+        [SerializeField] private float verticalEdgeLengthDifferenceThreshold = 4f;
+        [SerializeField] private float minLedgeMergeDistance = 2.5f;
 
         [Header("Debug")]
         [SerializeField] private bool drawDebugAim;
         [SerializeField] private bool drawDebugFootprint = true;
-        [SerializeField, FormerlySerializedAs("drawDebugRays")] private bool drawDebugBoundaryResult;
+        [SerializeField] private bool drawDebugBoundaryResult;
         [SerializeField] private bool drawDebugRayMarch;
         [SerializeField] private bool debugShowMaskTexture;
 
         private PlayerController playerController;
         private Vector3 aimOrigin;
-        private Vector3 aimForward;
+        private Vector3 aimTarget;
         private bool aimValid;
         private readonly VisibleAreaBuilder visibleAreaBuilder = new VisibleAreaBuilder();
         private Mesh footprintMesh;
@@ -70,7 +69,7 @@ namespace Tactics.Vision
         public static VisionController Active { get; private set; }
 
         public Vector3 AimOrigin => aimOrigin;
-        public Vector3 AimForward => aimForward;
+        public Vector3 AimTarget => aimTarget;
         public Vector3 FootprintMaskOrigin => aimValid ? transform.position : Vector3.zero;
         public float MaxViewDistance => maxViewDistance;
         public float FogStrength => fogStrength;
@@ -79,36 +78,32 @@ namespace Tactics.Vision
         public bool DebugShowMaskTexture => debugShowMaskTexture;
 
         public VisionConfig Config => new VisionConfig(
-            viewAngle,
-            verticalHalfAngle,
+            horizontalViewAngle,
+            verticalViewAngle,
             maxViewDistance,
             eyeHeight,
             enemyHeight,
             enemyRadius,
             losMask,
-            groundMask,
-            castMask,
             losSkinWidth,
-            azimuthSamples,
-            elevationSamples,
             meshOffset,
-            fogStrength,
             edgeLengthDifferenceThreshold,
             edgeLengthThresholdReferenceDistance,
             edgeLengthDifferenceThresholdMin,
             longSightRefineDistance,
             edgeMatchTolerance,
-            maxEdgeRefinements,
+            maxHorizontalEdgeRefinements,
+            maxVerticalEdgeRefinements,
             boundaryRayCount,
+            sparseLedgeRayCount,
+            verticalEdgeLengthDifferenceThreshold,
+            minLedgeMergeDistance,
             maxVisionGroundPasses);
 
         private void Awake()
         {
             playerController = GetComponent<PlayerController>();
             Active = this;
-
-            if (footprintMeshFilter == null && createFootprintMeshIfMissing)
-                EnsureFootprintMesh();
 
             if (footprintMeshFilter != null)
             {
@@ -133,20 +128,23 @@ namespace Tactics.Vision
 
         private void OnValidate()
         {
-            viewAngle = Mathf.Clamp(viewAngle, 1f, 180f);
+            horizontalViewAngle = Mathf.Clamp(horizontalViewAngle, 1f, 180f);
+            verticalViewAngle = Mathf.Clamp(verticalViewAngle, 1f, 180f);
             maxViewDistance = Mathf.Max(1f, maxViewDistance);
             enemyHeight = Mathf.Max(enemyRadius * 2f, enemyHeight);
             enemyRadius = Mathf.Max(0.01f, enemyRadius);
-            azimuthSamples = Mathf.Max(4, azimuthSamples);
-            elevationSamples = Mathf.Max(2, elevationSamples);
             meshOffset = Mathf.Max(0f, meshOffset);
             edgeLengthDifferenceThreshold = Mathf.Max(0f, edgeLengthDifferenceThreshold);
             edgeLengthThresholdReferenceDistance = Mathf.Max(0.1f, edgeLengthThresholdReferenceDistance);
             edgeLengthDifferenceThresholdMin = Mathf.Max(0f, edgeLengthDifferenceThresholdMin);
             longSightRefineDistance = Mathf.Max(0f, longSightRefineDistance);
             edgeMatchTolerance = Mathf.Max(0f, edgeMatchTolerance);
-            maxEdgeRefinements = Mathf.Max(0, maxEdgeRefinements);
+            maxHorizontalEdgeRefinements = Mathf.Max(0, maxHorizontalEdgeRefinements);
+            maxVerticalEdgeRefinements = Mathf.Max(0, maxVerticalEdgeRefinements);
             boundaryRayCount = Mathf.Clamp(boundaryRayCount, 2, 64);
+            sparseLedgeRayCount = Mathf.Clamp(sparseLedgeRayCount, 3, 7);
+            verticalEdgeLengthDifferenceThreshold = Mathf.Max(0f, verticalEdgeLengthDifferenceThreshold);
+            minLedgeMergeDistance = Mathf.Max(0f, minLedgeMergeDistance);
             maxVisionGroundPasses = Mathf.Clamp(maxVisionGroundPasses, 1, 32);
         }
 
@@ -162,7 +160,7 @@ namespace Tactics.Vision
 
         public bool IsPointVisible(Vector3 worldPoint)
         {
-            return aimValid && VisionEvaluator.IsPointVisible(aimOrigin, aimForward, worldPoint, Config);
+            return aimValid && VisionEvaluator.IsPointVisible(aimOrigin, aimTarget, worldPoint, Config);
         }
 
         public bool IsEnemyVisibleAt(Vector3 feetPosition, float heightOverride = -1f, float radiusOverride = -1f)
@@ -170,7 +168,7 @@ namespace Tactics.Vision
             return aimValid &&
                    VisionEvaluator.IsEnemyVisibleAt(
                        aimOrigin,
-                       aimForward,
+                       aimTarget,
                        feetPosition,
                        Config,
                        heightOverride,
@@ -189,7 +187,7 @@ namespace Tactics.Vision
                 return;
 
             aimOrigin = origin.position;
-            aimForward = origin.forward;
+            aimTarget = origin.forward;
             aimValid = true;
         }
 
@@ -200,7 +198,7 @@ namespace Tactics.Vision
 
             visibleAreaBuilder.Build(
                 aimOrigin,
-                aimForward,
+                aimTarget,
                 Config,
                 footprintMesh,
                 footprintMeshFilter.transform);
@@ -215,27 +213,6 @@ namespace Tactics.Vision
             }
 
             VisionFootprintPolygonPublisher.Publish(visibleAreaBuilder.WorldPolygonVertices);
-        }
-
-        private void EnsureFootprintMesh()
-        {
-            Transform origin = playerController != null ? playerController.VisionOrigin : null;
-            if (origin == null)
-                return;
-
-            Transform existing = origin.Find("FootprintMesh");
-            if (existing != null)
-            {
-                footprintMeshFilter = existing.GetComponent<MeshFilter>();
-                ConfigureFootprintRenderer(footprintMeshFilter);
-                return;
-            }
-
-            var footprintObject = new GameObject("FootprintMesh");
-            footprintObject.transform.SetParent(origin, false);
-            footprintMeshFilter = footprintObject.AddComponent<MeshFilter>();
-            footprintObject.AddComponent<MeshRenderer>();
-            ConfigureFootprintRenderer(footprintMeshFilter);
         }
 
         private void ConfigureFootprintRenderer(MeshFilter meshFilter)
@@ -265,14 +242,7 @@ namespace Tactics.Vision
             if (!drawDebugBoundaryResult || !Application.isPlaying)
                 return;
 
-            Color resultColor = new Color(1f, 0.85f, 0.2f, 0.95f);
             Color missColor = new Color(1f, 0.35f, 0.35f, 0.35f);
-
-            for (int i = 0; i < visibleAreaBuilder.DebugBoundaryResultRays.Count; i++)
-            {
-                (Vector3 start, Vector3 end) = visibleAreaBuilder.DebugBoundaryResultRays[i];
-                Debug.DrawLine(start, end, resultColor);
-            }
 
             for (int i = 0; i < visibleAreaBuilder.DebugBoundaryMissRays.Count; i++)
             {
@@ -288,6 +258,12 @@ namespace Tactics.Vision
 
             Color marchHitColor = new Color(0.2f, 0.85f, 1f, 0.95f);
             Color marchMissColor = new Color(0.2f, 0.85f, 1f, 0.35f);
+
+            Color pathFanColor = Color.darkRed;
+            Color pathRefineColor = Color.darkBlue;
+            Color pathDefaultColor = Color.grey;
+            Color pathGroundCheckColor = Color.brown;
+
             Color visionGroundColor = new Color(1f, 0.55f, 0.1f, 0.95f);
             Color solidColor = new Color(1f, 0.25f, 0.25f, 0.95f);
             Color endpointColor = new Color(0.2f, 1f, 0.35f, 0.95f);
@@ -298,14 +274,34 @@ namespace Tactics.Vision
                 Debug.DrawLine(cast.From, cast.To, cast.Missed ? marchMissColor : marchHitColor);
             }
 
+            for (int i = 0; i < visibleAreaBuilder.DebugFanRays.Count; i++)
+            {
+                (Vector3 start, Vector3 end) = visibleAreaBuilder.DebugFanRays[i];
+                Debug.DrawLine(start, end, pathFanColor);
+            }
+            for (int i = 0; i < visibleAreaBuilder.DebugRefineRays.Count; i++)
+            {
+                (Vector3 start, Vector3 end) = visibleAreaBuilder.DebugRefineRays[i];
+                Debug.DrawLine(start, end, pathRefineColor);
+            }
+            for (int i = 0; i < visibleAreaBuilder.DebugDefaultRays.Count; i++)
+            {
+                (Vector3 start, Vector3 end) = visibleAreaBuilder.DebugDefaultRays[i];
+                Debug.DrawLine(start, end, pathDefaultColor);
+            }
+            for (int i = 0; i < visibleAreaBuilder.DebugGroundCheckRays.Count; i++)
+            {
+                (Vector3 start, Vector3 end) = visibleAreaBuilder.DebugGroundCheckRays[i];
+                Debug.DrawLine(start, end, pathGroundCheckColor);
+            }
+
             for (int i = 0; i < visibleAreaBuilder.DebugVisionGroundHits.Count; i++)
                 DebugDrawWireSphere(visibleAreaBuilder.DebugVisionGroundHits[i], 0.18f, visionGroundColor);
 
             for (int i = 0; i < visibleAreaBuilder.DebugSolidIntercepts.Count; i++)
                 DebugDrawWireSphere(visibleAreaBuilder.DebugSolidIntercepts[i], 0.12f, solidColor);
 
-            for (int i = 0; i < visibleAreaBuilder.DebugDistinctEndpoints.Count; i++)
-                DebugDrawWireSphere(visibleAreaBuilder.DebugDistinctEndpoints[i], 0.1f, endpointColor);
+
         }
 
         private void DrawAimDebugLines()
@@ -374,20 +370,10 @@ namespace Tactics.Vision
             for (int i = 0; i < visibleAreaBuilder.DebugSolidIntercepts.Count; i++)
                 Gizmos.DrawSphere(visibleAreaBuilder.DebugSolidIntercepts[i], 0.12f);
 
-            Gizmos.color = endpointColor;
-            for (int i = 0; i < visibleAreaBuilder.DebugDistinctEndpoints.Count; i++)
-                Gizmos.DrawSphere(visibleAreaBuilder.DebugDistinctEndpoints[i], 0.1f);
         }
 
         private void DrawBoundaryResultGizmos()
         {
-            Gizmos.color = new Color(1f, 0.85f, 0.2f, 0.95f);
-            for (int i = 0; i < visibleAreaBuilder.DebugBoundaryResultRays.Count; i++)
-            {
-                (Vector3 start, Vector3 end) = visibleAreaBuilder.DebugBoundaryResultRays[i];
-                Gizmos.DrawLine(start, end);
-            }
-
             Gizmos.color = new Color(1f, 0.35f, 0.35f, 0.35f);
             for (int i = 0; i < visibleAreaBuilder.DebugBoundaryMissRays.Count; i++)
             {

@@ -6,23 +6,19 @@ namespace Tactics.Tests.EditMode
 {
     public class VisionEvaluatorTests
     {
-        private const float ViewAngle = 103f;
+        private const float HorizontalViewAngle = 103f;
+        private const float VerticalViewAngle = 70.53f;
 
         private static VisionConfig DefaultConfig => new VisionConfig(
-            ViewAngle,
-            verticalHalfAngle: 80f,
+            HorizontalViewAngle,
+            VerticalViewAngle,
             maxViewDistance: 500f,
             eyeHeight: 1.5f,
             enemyHeight: 2f,
             enemyRadius: 0.5f,
             losMask: VisionLayerMasks.DefaultLos,
-            groundMask: VisionLayerMasks.GroundOnly,
-            castMask: VisionLayerMasks.DefaultCast,
             losSkinWidth: 0.05f,
-            azimuthSamples: 64,
-            elevationSamples: 12,
-            meshOffset: 0.05f,
-            fogStrength: 0.9f);
+            meshOffset: 0.05f);
 
         [Test]
         public void IsInCone_PointOnForwardAxis_IsVisible()
@@ -47,7 +43,7 @@ namespace Tactics.Tests.EditMode
         {
             Vector3 origin = Vector3.zero;
             Vector3 forward = Vector3.forward;
-            float halfAngle = ViewAngle * 0.5f;
+            float halfAngle = HorizontalViewAngle * 0.5f;
 
             Vector3 direction = Quaternion.Euler(0f, halfAngle, 0f) * forward;
             Vector3 target = origin + direction * 10f;
@@ -60,7 +56,7 @@ namespace Tactics.Tests.EditMode
         {
             Vector3 origin = Vector3.zero;
             Vector3 forward = Vector3.forward;
-            float halfAngle = ViewAngle * 0.5f;
+            float halfAngle = HorizontalViewAngle * 0.5f;
 
             Vector3 direction = Quaternion.Euler(0f, halfAngle + 1f, 0f) * forward;
             Vector3 target = origin + direction * 10f;
