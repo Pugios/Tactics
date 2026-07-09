@@ -8,6 +8,8 @@ namespace Tactics.Vision
     /// </summary>
     public class VisibleAreaBuilder
     {
+
+        private const float AzimuthDuplicateTolerance = 0.15f;
         private struct RaySample
         {
             public float Azimuth;
@@ -20,6 +22,8 @@ namespace Tactics.Vision
         private readonly List<int> indices = new List<int>();
         private readonly List<Vector3> worldPolygonVertices = new List<Vector3>();
         private readonly List<RaySample> fan0Boundary = new List<RaySample>();
+        private readonly List<RaySample> upLedgeWinners = new List<RaySample>();
+        private readonly List<RaySample> downLedgeWinners = new List<RaySample>();
         private readonly List<RaySample> ledgeWinners = new List<RaySample>();
         private readonly List<RaySample> ledgeRing = new List<RaySample>();
         private readonly List<RaySample> meshCandidates = new List<RaySample>();
@@ -87,7 +91,7 @@ namespace Tactics.Vision
             CastFan(
                 aimOrigin,
                 fanCenterTarget,
-                config.VerticalHalfAngle,
+                config.VerticalViewAngle * 0.5f,
                 config.SparseLedgeRayCount,
                 config,
                 fanScratch);
@@ -97,27 +101,26 @@ namespace Tactics.Vision
             CastFan(
                 aimOrigin,
                 fanCenterTarget,
-                -config.VerticalHalfAngle,
+                -config.VerticalViewAngle * 0.5f,
                 config.SparseLedgeRayCount,
                 config,
                 fanScratch);
 
             List<RaySample> downRaw = new List<RaySample>(fanScratch);
 
-            ledgeWinners.Clear();
-            VerticalEdgeRefinement(fan0Boundary, upRaw, aimOrigin, fanCenterTarget, config, ledgeWinners);
-            VerticalEdgeRefinement(fan0Boundary, downRaw, aimOrigin, fanCenterTarget, config, ledgeWinners);
+            VerticalEdgeRefinement(fan0Boundary, upRaw, aimOrigin, fanCenterTarget, config, upLedgeWinners);
+            VerticalEdgeRefinement(fan0Boundary, downRaw, aimOrigin, fanCenterTarget, config, downLedgeWinners);
 
-            int ledgeHorizontalSteps = Mathf.Min(2, config.MaxHorizontalEdgeRefinements);
+            MergeLedgeWinnersByAzimuth(upLedgeWinners, downLedgeWinners, ledgeWinners);
+
             HorizontalEdgeRefinement(
                 ledgeWinners,
                 aimOrigin,
                 fanCenterTarget,
                 config,
-                ledgeHorizontalSteps,
+                config.MaxHorizontalEdgeRefinements,
                 ledgeRing);
             
-            meshCandidates.Clear();
             meshCandidates.AddRange(fan0Boundary);
             meshCandidates.AddRange(ledgeRing.Count > 0 ? ledgeRing : ledgeWinners);
 
@@ -130,6 +133,8 @@ namespace Tactics.Vision
             indices.Clear();
             worldPolygonVertices.Clear();
             fan0Boundary.Clear();
+            upLedgeWinners.Clear();
+            downLedgeWinners.Clear();
             ledgeWinners.Clear();
             ledgeRing.Clear();
             meshCandidates.Clear();
@@ -151,8 +156,9 @@ namespace Tactics.Vision
 
         private void CastFan(Vector3 aimOrigin, Vector3 fanCenterTarget, float elevationDegrees, int rayCount, in VisionConfig config, List<RaySample> fan)
         {
+            fan.Clear();
             rayCount = Mathf.Max(2, rayCount);
-            float halfAngle = config.HorizontalHalfAngle;
+            float halfAngle = config.HorizontalViewAngle * 0.5f;
 
             for (int i = 0; i < rayCount; i++)
             {
@@ -201,6 +207,13 @@ namespace Tactics.Vision
 
             pitchAxis.Normalize();
             return (Quaternion.AngleAxis(-elevationDegrees, pitchAxis) * yawedForward).normalized;
+        }
+
+        private static float HorizontalDistance(Vector3 origin, Vector3 point)
+        {
+            return Vector2.Distance(
+                new Vector2(origin.x, origin.z),
+                new Vector2(point.x, point.z));
         }
 
         private bool TryMarchRay(Vector3 origin, Vector3 direction, in VisionConfig config, RayDebugSource debugSource, out Vector3 hitPoint)
@@ -314,15 +327,15 @@ namespace Tactics.Vision
             return false;
         }
 
-        private void HorizontalEdgeRefinement(IReadOnlyList<RaySample> samples, Vector3 aimOrigin, Vector3 fanCenterForward, in VisionConfig config, int maxRefinementSteps, List<RaySample> into)
+        private void HorizontalEdgeRefinement(IReadOnlyList<RaySample> samples, Vector3 aimOrigin, Vector3 aimTarget, in VisionConfig config, int maxRefinementSteps, List<RaySample> output)
         {
-            into.Clear();
+            output.Clear();
             if (samples.Count == 0)
                 return;
 
             for (int i = 0; i < samples.Count; i++)
             {
-                into.Add(samples[i]);
+                output.Add(samples[i]);
 
                 if (i >= samples.Count - 1)
                     continue;
@@ -335,16 +348,16 @@ namespace Tactics.Vision
                     samples[i],
                     samples[i + 1],
                     aimOrigin,
-                    fanCenterForward,
+                    aimTarget,
                     config,
                     depth: 0,
                     maxRefinementSteps,
                     edgeScratch);
-                into.AddRange(edgeScratch);
+                output.AddRange(edgeScratch);
             }
         }
 
-        private void VerticalEdgeRefinement(IReadOnlyList<RaySample> fan0Boundary, IReadOnlyList<RaySample> sparseFan, Vector3 aimOrigin, Vector3 fanCenterForward, in VisionConfig config, List<RaySample> into)
+        private void VerticalEdgeRefinement(IReadOnlyList<RaySample> fan0Boundary, IReadOnlyList<RaySample> sparseFan, Vector3 aimOrigin, Vector3 aimTarget, in VisionConfig config, List<RaySample> output)
         {
             for (int i = 0; i < sparseFan.Count; i++)
             {
@@ -359,19 +372,167 @@ namespace Tactics.Vision
                     baseSample,
                     elevated,
                     aimOrigin,
-                    fanCenterForward,
+                    aimTarget,
                     config,
                     depth: 0,
                     config.MaxVerticalEdgeRefinements,
                     edgeScratch);
 
-                into.Add(PickFarthestSample(baseSample, elevated, edgeScratch));
+                output.Add(PickFarthestSample(baseSample, elevated, edgeScratch));
             }
+        }
+
+        private static RaySample GetClosestSampleAtAzimuth(float azimuth, IReadOnlyList<RaySample> samples)
+        {
+            RaySample best = samples[0];
+            float bestDelta = Mathf.Abs(best.Azimuth - azimuth);
+
+            for (int i = 1; i < samples.Count; i++)
+            {
+                float delta = Mathf.Abs(samples[i].Azimuth - azimuth);
+                if (delta < bestDelta)
+                {
+                    bestDelta = delta;
+                    best = samples[i];
+                }
+            }
+
+            return best;
+        }
+
+        private static bool ShouldRefineEdge(RaySample left, RaySample right, in VisionConfig config)
+        {
+            float lengthDiff = Mathf.Abs(left.Distance - right.Distance);
+            float rayCellWidth = GetRayCellWidth(left, right);
+
+            if (lengthDiff >= rayCellWidth * config.EdgeRefineSensitivity)
+                return true;
+
+            return rayCellWidth >= config.HiddenGeometryThreshold;
+        }
+
+        private static float GetRayCellWidth(RaySample left, RaySample right)
+        {
+            // Get expected distance of points at that distance and angle
+            float azimuthDelta = Mathf.Abs(right.Azimuth - left.Azimuth) * Mathf.Deg2Rad;
+            float elevationDelta = Mathf.Abs(right.Elevation - left.Elevation) * Mathf.Deg2Rad;
+
+            float avgDistance = (left.Distance + right.Distance) * 0.5f;
+
+            return avgDistance * Mathf.Max(azimuthDelta,elevationDelta);
+        }
+
+        private void RefineEdge(RaySample left, RaySample right, Vector3 aimOrigin, Vector3 aimTarget, in VisionConfig config, int depth, int maxDepth, List<RaySample> into)
+        {
+            if (depth >= maxDepth)
+                return;
+
+            RaySample mid = CastRay(
+                aimOrigin,
+                aimTarget,
+                (left.Elevation + right.Elevation) * 0.5f,
+                (left.Azimuth + right.Azimuth) * 0.5f,
+                config,
+                RayDebugSource.Refine);
+
+            float tolerance = GetRayCellWidth(left, right) * config.EdgeRefineSensitivity;
+
+            float toLeft = Mathf.Abs(mid.Distance - left.Distance);
+            float toRight = Mathf.Abs(mid.Distance - right.Distance);
+            bool closeToLeft = toLeft <= tolerance;
+            bool closeToRight = toRight <= tolerance;
+
+            if (closeToLeft && closeToRight)
+            {
+                into.Add(left.Distance >= right.Distance ? left : right);
+                return;
+            }
+
+            if (closeToLeft && !closeToRight)
+            {
+                into.Add(mid);
+                RefineEdge(mid, right, aimOrigin, aimTarget, config, depth + 1, maxDepth, into);
+                return;
+            }
+
+            if (closeToRight && !closeToLeft)
+            {
+                RefineEdge(left, mid, aimOrigin, aimTarget, config, depth + 1, maxDepth, into);
+                into.Add(mid);
+                return;
+            }
+
+            if (toLeft > toRight)
+            {
+                RefineEdge(left, mid, aimOrigin, aimTarget, config, depth + 1, maxDepth, into);
+                into.Add(mid);
+            }
+            else
+            {
+                into.Add(mid);
+                RefineEdge(mid, right, aimOrigin, aimTarget, config, depth + 1, maxDepth, into);
+            }
+        }
+
+        private static RaySample PickFarthestSample(RaySample a, RaySample b, List<RaySample> extras)
+        {
+            RaySample best = a.Distance >= b.Distance ? a : b;
+            for (int i = 0; i < extras.Count; i++)
+            {
+                if (extras[i].Distance > best.Distance)
+                    best = extras[i];
+            }
+
+            return best;
+        }
+
+        private static void MergeLedgeWinnersByAzimuth(List<RaySample> upLedgeWinners, List<RaySample> downLedgeWinners, List<RaySample> ledgeWinners)
+        {
+            ledgeWinners.Clear();
+
+            int total = upLedgeWinners.Count + downLedgeWinners.Count;
+
+            if (total <= 0)
+                return;
+
+            var combined = new List<RaySample>(total);
+            combined.AddRange(upLedgeWinners);
+            combined.AddRange(downLedgeWinners);
+
+            CollapseDuplicateAzimuths(combined, ledgeWinners);
+        }
+
+        private static void CollapseDuplicateAzimuths(List<RaySample> samples, List<RaySample> output)
+        {
+            output.Clear();
+            if (samples.Count <= 0)
+                return;
+            samples.Sort((a, b) => a.Azimuth.CompareTo(b.Azimuth));
+            RaySample best = samples[0];
+
+            for (int i = 1; i < samples.Count; i++)
+            {
+                RaySample sample = samples[i];
+                if (Mathf.Abs(sample.Azimuth - best.Azimuth) <= AzimuthDuplicateTolerance)
+                {
+                    if (sample.Distance > best.Distance)
+                        best = sample;
+                    continue;
+                }
+                else
+                {
+                    output.Add(best);
+                    best = sample;
+                }
+            }
+            output.Add(best);
         }
 
         private void BuildMesh(List<RaySample> candidates, Vector3 aimOrigin, Mesh mesh, Transform localSpace, in VisionConfig config)
         {
-            List<RaySample> boundary = SelectFarthestPerAzimuth(candidates, config);
+            List<RaySample> boundary = new List<RaySample>();
+            CollapseDuplicateAzimuths(candidates, boundary);
+
 
             if (boundary.Count < 2)
             {
@@ -398,170 +559,6 @@ namespace Tactics.Vision
             mesh.SetVertices(vertices);
             mesh.SetTriangles(indices, 0);
             mesh.RecalculateBounds();
-        }
-
-        private static List<RaySample> SelectFarthestPerAzimuth(List<RaySample> samples, in VisionConfig config)
-        {
-            var result = new List<RaySample>();
-            if (samples.Count == 0)
-                return result;
-
-            samples.Sort((a, b) => a.Azimuth.CompareTo(b.Azimuth));
-
-            float clusterTolerance = GetAzimuthClusterTolerance(config);
-            RaySample best = samples[0];
-
-            for (int i = 1; i < samples.Count; i++)
-            {
-                RaySample sample = samples[i];
-                if (Mathf.Abs(sample.Azimuth - best.Azimuth) <= clusterTolerance)
-                {
-                    if (sample.Distance > best.Distance)
-                        best = sample;
-                    continue;
-                }
-
-                result.Add(best);
-                best = sample;
-            }
-
-            result.Add(best);
-            return result;
-        }
-
-        private static RaySample GetClosestSampleAtAzimuth(float azimuth, IReadOnlyList<RaySample> samples)
-        {
-            RaySample best = samples[0];
-            float bestDelta = Mathf.Abs(best.Azimuth - azimuth);
-
-            for (int i = 1; i < samples.Count; i++)
-            {
-                float delta = Mathf.Abs(samples[i].Azimuth - azimuth);
-                if (delta < bestDelta)
-                {
-                    bestDelta = delta;
-                    best = samples[i];
-                }
-            }
-
-            return best;
-        }
-
-        private static RaySample PickFarthestSample(RaySample a, RaySample b, List<RaySample> extras)
-        {
-            RaySample best = a.Distance >= b.Distance ? a : b;
-            for (int i = 0; i < extras.Count; i++)
-            {
-                if (extras[i].Distance > best.Distance)
-                    best = extras[i];
-            }
-
-            return best;
-        }
-
-        private void RefineEdge(RaySample left, RaySample right, Vector3 aimOrigin, Vector3 fanCenterForward, in VisionConfig config, int depth, int maxDepth, List<RaySample> into)
-        {
-            if (depth >= maxDepth)
-                return;
-
-            RaySample mid = CastRay(
-                aimOrigin,
-                fanCenterForward,
-                (left.Elevation + right.Elevation) * 0.5f,
-                (left.Azimuth + right.Azimuth) * 0.5f,
-                config,
-                RayDebugSource.Refine);
-
-            float tolerance = GetEffectiveMatchTolerance(left, right, config);
-            float toLeft = Mathf.Abs(mid.Distance - left.Distance);
-            float toRight = Mathf.Abs(mid.Distance - right.Distance);
-            bool closeToLeft = toLeft <= tolerance;
-            bool closeToRight = toRight <= tolerance;
-
-            if (closeToLeft && closeToRight)
-            {
-                into.Add(left.Distance >= right.Distance ? left : right);
-                return;
-            }
-
-            if (closeToLeft && !closeToRight)
-            {
-                into.Add(mid);
-                RefineEdge(mid, right, aimOrigin, fanCenterForward, config, depth + 1, maxDepth, into);
-                return;
-            }
-
-            if (closeToRight && !closeToLeft)
-            {
-                RefineEdge(left, mid, aimOrigin, fanCenterForward, config, depth + 1, maxDepth, into);
-                into.Add(mid);
-                return;
-            }
-
-            if (toLeft > toRight)
-            {
-                RefineEdge(left, mid, aimOrigin, fanCenterForward, config, depth + 1, maxDepth, into);
-                into.Add(mid);
-            }
-            else
-            {
-                into.Add(mid);
-                RefineEdge(mid, right, aimOrigin, fanCenterForward, config, depth + 1, maxDepth, into);
-            }
-        }
-
-        private static float GetAzimuthClusterTolerance(in VisionConfig config)
-        {
-            float fanSpacing = config.HorizontalHalfAngle * 2f / Mathf.Max(1, config.BoundaryRayCount - 1);
-            return Mathf.Max(0.25f, fanSpacing * 0.5f);
-        }
-
-        private static bool ShouldRefineEdge(RaySample left, RaySample right, in VisionConfig config)
-        {
-            float avgDistance = (left.Distance + right.Distance) * 0.5f;
-            float lengthDiff = Mathf.Abs(left.Distance - right.Distance);
-            float effectiveThreshold = GetEffectiveLengthDifferenceThreshold(avgDistance, config);
-
-            if (lengthDiff >= effectiveThreshold)
-                return true;
-
-            return avgDistance >= config.LongSightRefineDistance;
-        }
-
-        private static float GetEffectiveLengthDifferenceThreshold(float avgDistance, in VisionConfig config)
-        {
-            if (avgDistance <= 0.01f)
-                return config.EdgeLengthDifferenceThreshold;
-
-            float scaled = config.EdgeLengthDifferenceThreshold *
-                           (config.EdgeLengthThresholdReferenceDistance / avgDistance);
-
-            return Mathf.Clamp(
-                scaled,
-                config.EdgeLengthDifferenceThresholdMin,
-                config.EdgeLengthDifferenceThreshold);
-        }
-
-        private static float GetEffectiveMatchTolerance(RaySample left, RaySample right, in VisionConfig config)
-        {
-            float avgDistance = (left.Distance + right.Distance) * 0.5f;
-            if (avgDistance <= 0.01f)
-                return config.EdgeMatchTolerance;
-
-            float scaled = config.EdgeMatchTolerance *
-                           (config.EdgeLengthThresholdReferenceDistance / avgDistance);
-
-            return Mathf.Clamp(
-                scaled,
-                config.EdgeLengthDifferenceThresholdMin,
-                config.EdgeMatchTolerance);
-        }
-
-        private static float HorizontalDistance(Vector3 origin, Vector3 point)
-        {
-            return Vector2.Distance(
-                new Vector2(origin.x, origin.z),
-                new Vector2(point.x, point.z));
         }
         
         private void RecordMarchCast(Vector3 from, Vector3 to, bool missed)

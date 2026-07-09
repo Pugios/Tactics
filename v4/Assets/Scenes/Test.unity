@@ -1538,8 +1538,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 125ac2e4c40fa4240909ff73aa5c15e3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Tactics::Tactics.Vision.VisionController
-  viewAngle: 103
-  verticalHalfAngle: 80
+  horizontalViewAngle: 103
+  verticalViewAngle: 70.53
   maxViewDistance: 500
   eyeHeight: 1.5
   enemyHeight: 2
@@ -1547,27 +1547,18 @@ MonoBehaviour:
   losMask:
     serializedVersion: 2
     m_Bits: 1217
-  groundMask:
-    serializedVersion: 2
-    m_Bits: 128
-  castMask:
-    serializedVersion: 2
-    m_Bits: 2240
-  losSkinWidth: 0.1
-  azimuthSamples: 64
-  elevationSamples: 12
+  losSkinWidth: 0.05
   meshOffset: 0.05
   fogStrength: 0.9
-  footprintMeshFilter: {fileID: 0}
-  footprintDrawMaterial: {fileID: 0}
-  createFootprintMeshIfMissing: 1
+  footprintMeshFilter: {fileID: 729777954}
+  footprintDrawMaterial: {fileID: 160154789899534285, guid: 3cfe416d2dfb373439fc05de28269ee6, type: 3}
   boundaryRayCount: 10
-  edgeLengthDifferenceThreshold: 5
-  edgeLengthThresholdReferenceDistance: 10
-  edgeLengthDifferenceThresholdMin: 0.25
-  longSightRefineDistance: 20
-  edgeMatchTolerance: 5
-  maxEdgeRefinements: 3
+  maxHorizontalEdgeRefinements: 5
+  maxVerticalEdgeRefinements: 1
+  maxVisionGroundPasses: 10
+  sparseLedgeRayCount: 3
+  edgeRefineSensitivity: 0.5
+  hiddenGeometryThreshold: 4
   drawDebugAim: 0
   drawDebugFootprint: 1
   drawDebugBoundaryResult: 0

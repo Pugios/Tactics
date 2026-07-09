@@ -18,7 +18,14 @@ namespace Tactics.Tests.EditMode
             enemyRadius: 0.5f,
             losMask: VisionLayerMasks.DefaultLos,
             losSkinWidth: 0.05f,
-            meshOffset: 0.05f);
+            meshOffset: 0.05f,
+            boundaryRayCount: 10,
+            maxHorizontalEdgeRefinements: 5,
+            maxVerticalEdgeRefinements: 1,
+            maxVisionGroundPasses: 10,
+            sparseLedgeRayCount: 3,
+            edgeRefineSensitivity: 0.5f,
+            hiddenGeometryThreshold: 4f);
 
         [Test]
         public void IsInCone_PointOnForwardAxis_IsVisible()

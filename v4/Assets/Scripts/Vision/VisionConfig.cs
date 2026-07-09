@@ -7,31 +7,31 @@ namespace Tactics.Vision
     /// </summary>
     public readonly struct VisionConfig
     {
+        // Player FoV
         public float HorizontalViewAngle { get; }
         public float VerticalViewAngle { get; }
-
-        public float HorizontalHalfAngle => HorizontalViewAngle * 0.5f;
-        public float VerticalHalfAngle => VerticalViewAngle * 0.5f;
-
         public float MaxViewDistance { get; }
+
+        // Player Proportions
         public float EyeHeight { get; }
         public float EnemyHeight { get; }
         public float EnemyRadius { get; }
+
+        // FoV Raycast hits
         public LayerMask LosMask { get; }
         public float LosSkinWidth { get; }
+
+        // FoV Building
         public float MeshOffset { get; }
-        public float EdgeLengthDifferenceThreshold { get; }
-        public float EdgeLengthThresholdReferenceDistance { get; }
-        public float EdgeLengthDifferenceThresholdMin { get; }
-        public float LongSightRefineDistance { get; }
-        public float EdgeMatchTolerance { get; }
+        public int BoundaryRayCount { get; }
         public int MaxHorizontalEdgeRefinements { get; }
         public int MaxVerticalEdgeRefinements { get; }
-        public int BoundaryRayCount { get; }
-        public int SparseLedgeRayCount { get; }
-        public float VerticalEdgeLengthDifferenceThreshold { get; }
-        public float MinLedgeMergeDistance { get; }
         public int MaxVisionGroundPasses { get; }
+        public int SparseLedgeRayCount { get; }
+
+        // FoV Refinement Rules
+        public float EdgeRefineSensitivity { get; }
+        public float HiddenGeometryThreshold { get; }
 
         public VisionConfig(
             float horizontalViewAngle,
@@ -43,18 +43,13 @@ namespace Tactics.Vision
             LayerMask losMask,
             float losSkinWidth,
             float meshOffset,
-            float edgeLengthDifferenceThreshold = 5f,
-            float edgeLengthThresholdReferenceDistance = 10f,
-            float edgeLengthDifferenceThresholdMin = 0.25f,
-            float longSightRefineDistance = 20f,
-            float edgeMatchTolerance = 5f,
-            int maxHorizontalEdgeRefinements = 3,
-            int maxVerticalEdgeRefinements = 1,
-            int boundaryRayCount = 10,
-            int sparseLedgeRayCount = 3,
-            float verticalEdgeLengthDifferenceThreshold = 4f,
-            float minLedgeMergeDistance = 2.5f,
-            int maxVisionGroundPasses = 5)
+            int boundaryRayCount,
+            int maxHorizontalEdgeRefinements,
+            int maxVerticalEdgeRefinements,
+            int maxVisionGroundPasses,
+            int sparseLedgeRayCount,
+            float edgeRefineSensitivity,
+            float hiddenGeometryThreshold)
         {
             HorizontalViewAngle = horizontalViewAngle;
             VerticalViewAngle = verticalViewAngle;
@@ -65,18 +60,13 @@ namespace Tactics.Vision
             LosMask = losMask;
             LosSkinWidth = losSkinWidth;
             MeshOffset = meshOffset;
-            EdgeLengthDifferenceThreshold = edgeLengthDifferenceThreshold;
-            EdgeLengthThresholdReferenceDistance = edgeLengthThresholdReferenceDistance;
-            EdgeLengthDifferenceThresholdMin = edgeLengthDifferenceThresholdMin;
-            LongSightRefineDistance = longSightRefineDistance;
-            EdgeMatchTolerance = edgeMatchTolerance;
+            BoundaryRayCount = boundaryRayCount;
             MaxHorizontalEdgeRefinements = maxHorizontalEdgeRefinements;
             MaxVerticalEdgeRefinements = maxVerticalEdgeRefinements;
-            BoundaryRayCount = boundaryRayCount;
-            SparseLedgeRayCount = sparseLedgeRayCount;
-            VerticalEdgeLengthDifferenceThreshold = verticalEdgeLengthDifferenceThreshold;
-            MinLedgeMergeDistance = minLedgeMergeDistance;
             MaxVisionGroundPasses = maxVisionGroundPasses;
+            SparseLedgeRayCount = sparseLedgeRayCount;
+            EdgeRefineSensitivity = edgeRefineSensitivity;
+            HiddenGeometryThreshold = hiddenGeometryThreshold;
         }
     }
 }

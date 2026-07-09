@@ -26,7 +26,7 @@ namespace Tactics.Vision
         /// </summary>
         public static bool IsPointVisible(Vector3 origin, Vector3 forward, Vector3 target, in VisionConfig config)
         {
-            if (!IsInCone(origin, forward, target, config.HorizontalHalfAngle))
+            if (!IsInCone(origin, forward, target, config.HorizontalViewAngle * 0.5f))
                 return false;
 
             return HasLineOfSight(origin, target, config.LosMask, config.LosSkinWidth);
@@ -144,7 +144,7 @@ namespace Tactics.Vision
             Vector3 toCenter = capsuleCenter - origin;
             float centerDistance = toCenter.magnitude;
 
-            float expandedHalfAngle = config.HorizontalHalfAngle;
+            float expandedHalfAngle = config.HorizontalViewAngle * 0.5f;
             if (centerDistance > 0.01f)
                 expandedHalfAngle += Mathf.Asin(Mathf.Clamp(radius / centerDistance, 0f, 1f)) * Mathf.Rad2Deg;
 

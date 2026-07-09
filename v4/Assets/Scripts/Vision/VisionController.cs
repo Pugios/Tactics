@@ -1,7 +1,5 @@
 using Tactics.Player;
 using UnityEngine;
-using UnityEngine.Serialization;
-using static UnityEditorInternal.ReorderableList;
 
 namespace Tactics.Vision
 {
@@ -38,24 +36,19 @@ namespace Tactics.Vision
         [SerializeField] private Material footprintDrawMaterial;
 
         [SerializeField, Range(2, 64)] private int boundaryRayCount = 10;
-        [SerializeField, Range(0, 10)] private int maxHorizontalEdgeRefinements = 5;
-        [SerializeField, Range(0, 4)] private int maxVerticalEdgeRefinements = 1;
+        [SerializeField, Range(3, 7)] private int sparseLedgeRayCount = 5;
+        [SerializeField, Range(0, 10)] private int maxHorizontalEdgeRefinements = 3;
+        [SerializeField, Range(0, 4)] private int maxVerticalEdgeRefinements = 3;
         [SerializeField, Range(1, 32)] private int maxVisionGroundPasses = 10;
-        [SerializeField, Range(3, 7)] private int sparseLedgeRayCount = 3;
 
-        [SerializeField] private float edgeLengthDifferenceThreshold = 5f;
-        [SerializeField] private float edgeLengthThresholdReferenceDistance = 10f;
-        [SerializeField] private float edgeLengthDifferenceThresholdMin = 0.25f;
-        [SerializeField] private float longSightRefineDistance = 20f;
-        [SerializeField] private float edgeMatchTolerance = 5f;
-        [SerializeField] private float verticalEdgeLengthDifferenceThreshold = 4f;
-        [SerializeField] private float minLedgeMergeDistance = 2.5f;
+        [SerializeField] private float edgeRefineSensitivity = 0.5f;
+        [SerializeField] private float hiddenGeometryThreshold = 4f;
 
         [Header("Debug")]
         [SerializeField] private bool drawDebugAim;
         [SerializeField] private bool drawDebugFootprint = true;
+        [SerializeField] private bool drawDebugRayMarch = true;
         [SerializeField] private bool drawDebugBoundaryResult;
-        [SerializeField] private bool drawDebugRayMarch;
         [SerializeField] private bool debugShowMaskTexture;
 
         private PlayerController playerController;
@@ -87,18 +80,13 @@ namespace Tactics.Vision
             losMask,
             losSkinWidth,
             meshOffset,
-            edgeLengthDifferenceThreshold,
-            edgeLengthThresholdReferenceDistance,
-            edgeLengthDifferenceThresholdMin,
-            longSightRefineDistance,
-            edgeMatchTolerance,
+            boundaryRayCount,
             maxHorizontalEdgeRefinements,
             maxVerticalEdgeRefinements,
-            boundaryRayCount,
+            maxVisionGroundPasses,
             sparseLedgeRayCount,
-            verticalEdgeLengthDifferenceThreshold,
-            minLedgeMergeDistance,
-            maxVisionGroundPasses);
+            edgeRefineSensitivity,
+            hiddenGeometryThreshold);
 
         private void Awake()
         {
@@ -134,18 +122,13 @@ namespace Tactics.Vision
             enemyHeight = Mathf.Max(enemyRadius * 2f, enemyHeight);
             enemyRadius = Mathf.Max(0.01f, enemyRadius);
             meshOffset = Mathf.Max(0f, meshOffset);
-            edgeLengthDifferenceThreshold = Mathf.Max(0f, edgeLengthDifferenceThreshold);
-            edgeLengthThresholdReferenceDistance = Mathf.Max(0.1f, edgeLengthThresholdReferenceDistance);
-            edgeLengthDifferenceThresholdMin = Mathf.Max(0f, edgeLengthDifferenceThresholdMin);
-            longSightRefineDistance = Mathf.Max(0f, longSightRefineDistance);
-            edgeMatchTolerance = Mathf.Max(0f, edgeMatchTolerance);
+            boundaryRayCount = Mathf.Clamp(boundaryRayCount, 2, 64);
             maxHorizontalEdgeRefinements = Mathf.Max(0, maxHorizontalEdgeRefinements);
             maxVerticalEdgeRefinements = Mathf.Max(0, maxVerticalEdgeRefinements);
-            boundaryRayCount = Mathf.Clamp(boundaryRayCount, 2, 64);
-            sparseLedgeRayCount = Mathf.Clamp(sparseLedgeRayCount, 3, 7);
-            verticalEdgeLengthDifferenceThreshold = Mathf.Max(0f, verticalEdgeLengthDifferenceThreshold);
-            minLedgeMergeDistance = Mathf.Max(0f, minLedgeMergeDistance);
             maxVisionGroundPasses = Mathf.Clamp(maxVisionGroundPasses, 1, 32);
+            sparseLedgeRayCount = Mathf.Clamp(sparseLedgeRayCount, 3, 7);
+            edgeRefineSensitivity = Mathf.Max(0f, edgeRefineSensitivity);
+            hiddenGeometryThreshold = Mathf.Max(0f, hiddenGeometryThreshold);
         }
 
         private void LateUpdate()
