@@ -1,12 +1,14 @@
-Shader "Tactics/VisionUniformFog"
+Shader "Tactics/VisionEyeDepthCopy"
 {
+    // Copies the eye camera's device depth into an R32F color target so it can persist
+    // across cameras and be sampled by the fog composite pass.
     SubShader
     {
         Tags { "RenderType" = "Opaque" "RenderPipeline" = "UniversalPipeline" }
 
         Pass
         {
-            Name "VisionUniformFog"
+            Name "VisionEyeDepthCopy"
             ZWrite Off
             ZTest Always
             Cull Off
@@ -15,16 +17,15 @@ Shader "Tactics/VisionUniformFog"
             #pragma vertex Vert
             #pragma fragment Frag
 
+            #define USE_FULL_PRECISION_BLIT_TEXTURE 1
+
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.core/Runtime/Utilities/Blit.hlsl"
 
-            float _FogStrength;
-
-            half4 Frag(Varyings input) : SV_Target
+            float4 Frag(Varyings input) : SV_Target
             {
-                half4 sceneColor = SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_LinearClamp, input.texcoord);
-                half brightness = 1.0h - (half)_FogStrength;
-                return half4(sceneColor.rgb * brightness, sceneColor.a);
+                float deviceDepth = SAMPLE_TEXTURE2D_X_LOD(_BlitTexture, sampler_PointClamp, input.texcoord, 0).r;
+                return float4(deviceDepth, 0.0, 0.0, 1.0);
             }
             ENDHLSL
         }

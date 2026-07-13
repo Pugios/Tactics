@@ -3,7 +3,7 @@ using UnityEngine;
 namespace Tactics.Vision
 {
     /// <summary>
-    /// Runtime vision tuning passed to evaluators and the visible-area builder.
+    /// Runtime vision tuning passed to the CPU visibility evaluators.
     /// </summary>
     public readonly struct VisionConfig
     {
@@ -12,61 +12,30 @@ namespace Tactics.Vision
         public float VerticalViewAngle { get; }
         public float MaxViewDistance { get; }
 
-        // Player Proportions
-        public float EyeHeight { get; }
+        // Enemy Proportions
         public float EnemyHeight { get; }
         public float EnemyRadius { get; }
 
-        // FoV Raycast hits
+        // Line-of-sight raycasts
         public LayerMask LosMask { get; }
         public float LosSkinWidth { get; }
-
-        // FoV Building
-        public float MeshOffset { get; }
-        public int BoundaryRayCount { get; }
-        public int MaxHorizontalEdgeRefinements { get; }
-        public int MaxVerticalEdgeRefinements { get; }
-        public int MaxVisionGroundPasses { get; }
-        public int SparseLedgeRayCount { get; }
-
-        // FoV Refinement Rules
-        public float EdgeRefineSensitivity { get; }
-        public float HiddenGeometryThreshold { get; }
 
         public VisionConfig(
             float horizontalViewAngle,
             float verticalViewAngle,
             float maxViewDistance,
-            float eyeHeight,
             float enemyHeight,
             float enemyRadius,
             LayerMask losMask,
-            float losSkinWidth,
-            float meshOffset,
-            int boundaryRayCount,
-            int maxHorizontalEdgeRefinements,
-            int maxVerticalEdgeRefinements,
-            int maxVisionGroundPasses,
-            int sparseLedgeRayCount,
-            float edgeRefineSensitivity,
-            float hiddenGeometryThreshold)
+            float losSkinWidth)
         {
             HorizontalViewAngle = horizontalViewAngle;
             VerticalViewAngle = verticalViewAngle;
             MaxViewDistance = maxViewDistance;
-            EyeHeight = eyeHeight;
             EnemyHeight = enemyHeight;
             EnemyRadius = enemyRadius;
             LosMask = losMask;
             LosSkinWidth = losSkinWidth;
-            MeshOffset = meshOffset;
-            BoundaryRayCount = boundaryRayCount;
-            MaxHorizontalEdgeRefinements = maxHorizontalEdgeRefinements;
-            MaxVerticalEdgeRefinements = maxVerticalEdgeRefinements;
-            MaxVisionGroundPasses = maxVisionGroundPasses;
-            SparseLedgeRayCount = sparseLedgeRayCount;
-            EdgeRefineSensitivity = edgeRefineSensitivity;
-            HiddenGeometryThreshold = hiddenGeometryThreshold;
         }
     }
 }
