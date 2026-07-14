@@ -11,11 +11,10 @@ namespace Tactics.Vision
         public const int Wall = 6;
         public const int Ground = 7;
         public const int Dynamic = 9;
-        public const int Prop = 10;
 
-        /// <summary>Wall, Ground, Prop, and Default — all block line of sight.</summary>
+        /// <summary>Wall, Ground, and Default — all block line of sight.</summary>
         public static LayerMask DefaultLos =>
-            (1 << Wall) | (1 << Ground) | (1 << Prop) | (1 << Default);
+            (1 << Wall) | (1 << Ground) | (1 << Default);
 
         public static LayerMask GroundOnly => 1 << Ground;
 

@@ -11,12 +11,18 @@ namespace Tactics.Vision
     /// </summary>
     public class VisionFogCompositePass : ScriptableRenderPass
     {
-        private readonly VisionFogRendererSettings settings;
         private Material compositeMaterial;
+        private Shader compositeFogShader;
+        private Shader depthCopyShader;
+        private float fallbackFogStrength;
+        private bool debugShowMask;
 
-        public VisionFogCompositePass(VisionFogRendererSettings settings)
+        public VisionFogCompositePass(Shader compositeFogShader, Shader depthCopyShader, float fallbackFogStrength, bool debugShowMask)
         {
-            this.settings = settings;
+            this.compositeFogShader = compositeFogShader;
+            this.depthCopyShader = depthCopyShader;
+            this.fallbackFogStrength = fallbackFogStrength;
+            this.debugShowMask = debugShowMask;
             renderPassEvent = RenderPassEvent.AfterRenderingTransparents;
             ConfigureInput(ScriptableRenderPassInput.Depth);
         }
@@ -69,7 +75,7 @@ namespace Tactics.Vision
                 passData.source = source;
                 passData.sceneDepth = sceneDepth;
                 passData.fogStrength = ResolveFogStrength();
-                passData.debugShowMask = settings.debugShowMask ||
+                passData.debugShowMask = debugShowMask ||
                     (VisionController.Active != null && VisionController.Active.DebugShowMaskTexture);
                 passData.vision = visionState;
 
@@ -121,7 +127,7 @@ namespace Tactics.Vision
             if (VisionController.Active != null && VisionController.Active.HasValidAim)
                 return VisionController.Active.FogStrength;
 
-            return settings.fallbackFogStrength;
+            return fallbackFogStrength;
         }
     }
 }

@@ -69,11 +69,10 @@ MonoBehaviour:
   m_Name: VisionFogRendererFeature
   m_EditorClassIdentifier: Tactics.Vision::Tactics.Vision.VisionFogRendererFeature
   m_Active: 1
-  settings:
-    compositeFogShader: {fileID: 4800000, guid: a1bc7d18fdb42be41aa6122f98cecc96, type: 3}
-    depthCopyShader: {fileID: 4800000, guid: 5b3f0a7e2c9d4e1f8a6b0c2d4e6f8a1b, type: 3}
-    fallbackFogStrength: 0.9
-    debugShowMask: 0
+  compositeFogShader: {fileID: 4800000, guid: a1bc7d18fdb42be41aa6122f98cecc96, type: 3}
+  depthCopyShader: {fileID: 4800000, guid: 5b3f0a7e2c9d4e1f8a6b0c2d4e6f8a1b, type: 3}
+  fallbackFogStrength: 0.9
+  debugShowMask: 0
 --- !u!114 &7833122117494664109
 MonoBehaviour:
   m_ObjectHideFlags: 0

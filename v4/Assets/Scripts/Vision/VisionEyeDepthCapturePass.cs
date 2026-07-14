@@ -61,7 +61,7 @@ namespace Tactics.Vision
             {
                 passData.material = copyMaterial;
                 passData.source = sourceDepth;
-                passData.eyeViewProjection = cameraData.GetGPUProjectionMatrix() * cameraData.GetViewMatrix();
+                passData.eyeViewProjection = GL.GetGPUProjectionMatrix(cameraData.GetProjectionMatrix(), SystemInfo.graphicsUVStartsAtTop) * cameraData.GetViewMatrix();
                 LastEyeViewProjection = passData.eyeViewProjection;
 
                 builder.UseTexture(sourceDepth, AccessFlags.Read);
