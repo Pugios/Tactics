@@ -1,9 +1,11 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 using Tactics.Core;
+using Tactics.Weapons;
 
 namespace Tactics.Objectives
 {
+    [RequireComponent(typeof(WeaponInventory))]
     public class SpikeController : MonoBehaviour
     {
         [Header("Settings")]
@@ -12,6 +14,7 @@ namespace Tactics.Objectives
         [SerializeField] private GameObject spikePrefab;
 
         private InputAction interactAction;
+        private WeaponInventory inventory;
         private float interactTimer;
         private Spike currentSpike;
         private SpikeSite currentSite;
@@ -19,6 +22,7 @@ namespace Tactics.Objectives
         private void Start()
         {
             interactAction = InputSystem.actions.FindAction("Interact");
+            inventory = GetComponent<WeaponInventory>();
         }
 
         private void Update()
@@ -38,7 +42,8 @@ namespace Tactics.Objectives
             if (GameManager.Instance.GetCurrentState() != GameState.RoundActive) return;
 
             // Check for plant
-            if (currentSite != null && currentSite.IsPlayerInSite() && currentSpike == null)
+            if (currentSite != null && currentSite.IsPlayerInSite() && currentSpike == null &&
+                inventory != null && inventory.HasSpike)
             {
                 interactTimer += Time.deltaTime;
                 if (interactTimer >= plantTime)
@@ -63,6 +68,8 @@ namespace Tactics.Objectives
 
         private void PlantSpike()
         {
+            if (inventory == null || !inventory.ConsumeSpike()) return;
+
             GameObject spikeObj = Instantiate(spikePrefab, transform.position, Quaternion.identity);
             currentSpike = spikeObj.GetComponent<Spike>();
             currentSpike.Plant();

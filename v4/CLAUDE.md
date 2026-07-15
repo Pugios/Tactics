@@ -56,6 +56,7 @@ Valorant-style cred system: round-win (3000), loss-streak bonuses (1900/2400/290
 
 ### Objectives
 - `Spike` / `SpikeSite` / `SpikeController` — plant (4 s hold) and defuse (7 s hold) interactions gated on `GameState.RoundActive` and trigger-volume proximity.
+- **Plant site geometry is two separate meshes per site**, not one: a flat visual/walkable mesh (cut out of Ground, `PlantSite.mat`, non-convex non-trigger `MeshCollider` for standing on) plus a child object holding a separately modeled *solid* trigger mesh (`SpikeSite`'s `MeshCollider`, Convex + Is Trigger, no renderer). The trigger mesh is a Blender duplicate of the footprint with a Solidify modifier (2 m thickness, raised 1 m) so it has real vertical volume spanning the player's 2 m `CharacterController` height. A convex-hull trigger built directly from the flat footprint mesh doesn't work — a zero-thickness mesh's convex hull is itself degenerate, so a `CharacterController` resting on top of it never truly overlaps it and `OnTriggerEnter` won't fire reliably.
 
 ### Sound
 `SoundEmitter` tracks last move/shoot emit timestamps and exposes `IsCurrentlySounding` for the `SoundVisualizer` to draw radius circles. No audio clips — it's a pure gameplay-signal system.

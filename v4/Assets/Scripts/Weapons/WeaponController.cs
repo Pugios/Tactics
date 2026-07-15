@@ -4,42 +4,59 @@ using Tactics.Combat;
 
 namespace Tactics.Weapons
 {
+    [RequireComponent(typeof(WeaponInventory))]
+    [DisallowMultipleComponent]
     public class WeaponController : MonoBehaviour
     {
-        [SerializeField] private WeaponData currentWeapon;
         [SerializeField] private Transform shootPoint;
         [SerializeField] private LayerMask hitLayers;
 
+        private WeaponInventory inventory;
         private InputAction attackAction;
         private InputAction reloadAction;
         private float lastFireTime;
-        private int currentAmmo;
         private bool isReloading;
         private Tactics.Sound.SoundEmitter soundEmitter;
 
-        public int CurrentAmmo => currentAmmo;
-        public WeaponData CurrentWeapon => currentWeapon;
+        public int CurrentAmmo => inventory != null ? inventory.GetActiveAmmo() : 0;
+        public WeaponData CurrentWeapon => inventory != null ? inventory.GetActiveWeaponData() : null;
+        public bool IsReloading => isReloading;
         public event System.Action OnAmmoChanged;
+
+        private void Awake()
+        {
+            inventory = GetComponent<WeaponInventory>();
+        }
 
         private void Start()
         {
             attackAction = InputSystem.actions.FindAction("Attack");
             reloadAction = InputSystem.actions.FindAction("Reload");
             soundEmitter = GetComponent<Tactics.Sound.SoundEmitter>();
-            if (currentWeapon != null)
-            {
-                currentAmmo = currentWeapon.magazineSize;
-                OnAmmoChanged?.Invoke();
-            }
+
+            inventory.OnActiveWeaponChanged += HandleActiveWeaponChanged;
+            inventory.OnAmmoChanged += HandleAmmoChanged;
         }
+
+        private void OnDestroy()
+        {
+            if (inventory == null) return;
+            inventory.OnActiveWeaponChanged -= HandleActiveWeaponChanged;
+            inventory.OnAmmoChanged -= HandleAmmoChanged;
+        }
+
+        private void HandleActiveWeaponChanged() => OnAmmoChanged?.Invoke();
+        private void HandleAmmoChanged() => OnAmmoChanged?.Invoke();
 
         private void Update()
         {
             if (isReloading) return;
 
+            var currentWeapon = CurrentWeapon;
+
             if (reloadAction != null && reloadAction.WasPressedThisFrame())
             {
-                if (currentWeapon != null && currentAmmo < currentWeapon.magazineSize)
+                if (currentWeapon != null && !currentWeapon.infiniteAmmo && inventory.GetActiveAmmo() < currentWeapon.magazineSize)
                 {
                     StartCoroutine(Reload());
                     return;
@@ -55,32 +72,31 @@ namespace Tactics.Weapons
         private System.Collections.IEnumerator Reload()
         {
             isReloading = true;
-            
+
             // "Removing the bullets from the magazine"
-            currentAmmo = 0;
-            OnAmmoChanged?.Invoke();
+            inventory.SetActiveAmmo(0);
 
-            yield return new WaitForSeconds(currentWeapon.reloadSpeed);
+            var weapon = CurrentWeapon;
+            yield return new WaitForSeconds(weapon.reloadSpeed);
 
-            currentAmmo = currentWeapon.magazineSize;
+            inventory.SetActiveAmmo(weapon.magazineSize);
             isReloading = false;
-            OnAmmoChanged?.Invoke();
         }
 
         public void TryShoot()
         {
+            var currentWeapon = CurrentWeapon;
             if (currentWeapon == null) return;
             if (Time.time < lastFireTime + (1f / currentWeapon.fireRate)) return;
-            if (currentAmmo <= 0) return;
+            if (!currentWeapon.infiniteAmmo && inventory.GetActiveAmmo() <= 0) return;
 
-            Shoot();
+            Shoot(currentWeapon);
         }
 
-        private void Shoot()
+        private void Shoot(WeaponData currentWeapon)
         {
             lastFireTime = Time.time;
-            currentAmmo--;
-            OnAmmoChanged?.Invoke();
+            if (!currentWeapon.infiniteAmmo) inventory.SetActiveAmmo(inventory.GetActiveAmmo() - 1);
 
             if (soundEmitter != null) soundEmitter.EmitShootSound();
 
@@ -103,18 +119,18 @@ namespace Tactics.Weapons
             {
                 Vector3 direction = (mouseWorldPosition - startPoint).normalized;
                 float distanceToTarget = Vector3.Distance(startPoint, mouseWorldPosition);
-                
+
                 int wallLayer = 6;
                 int wallLayerMask = 1 << wallLayer;
                 RaycastHit[] wallHits = Physics.RaycastAll(startPoint, direction, distanceToTarget, wallLayerMask);
-                
+
                 float totalThickness = 0f;
                 foreach (var hit in wallHits)
                 {
                     // Secondary raycast from the 'back' of the wall
                     // Use a slightly larger distance than max penetration (1.0m) to find the exit
-                    Vector3 backStart = hit.point + direction * 2f; 
-                    
+                    Vector3 backStart = hit.point + direction * 2f;
+
                     // Shoot backwards and find all hits to identify the exit point of the same collider
                     RaycastHit[] backHits = Physics.RaycastAll(backStart, -direction, 2f, wallLayerMask);
                     foreach (var backHit in backHits)
@@ -131,7 +147,7 @@ namespace Tactics.Weapons
                 {
                     // 3. Proximity Damage (XZ plane)
                     Vector3 targetPos = target.transform.position;
-                    float xzDistance = Vector2.Distance(new Vector2(mouseWorldPosition.x, mouseWorldPosition.z), 
+                    float xzDistance = Vector2.Distance(new Vector2(mouseWorldPosition.x, mouseWorldPosition.z),
                                                         new Vector2(targetPos.x, targetPos.z));
 
                     float hitMultiplier = 0f;
@@ -153,7 +169,7 @@ namespace Tactics.Weapons
                     {
                         hitMultiplier = currentWeapon.lowMultiplier;
                     }
-                    
+
                     if (hitMultiplier > 0)
                     {
                         // 4. Damage Calculation
@@ -180,12 +196,6 @@ namespace Tactics.Weapons
                 float distance = (mouseWorldPosition != Vector3.zero) ? Vector3.Distance(startPoint, mouseWorldPosition) : 100f;
                 Debug.DrawRay(startPoint, direction * distance, Color.black, 0.1f);
             }
-        }
-
-        public void SetWeapon(WeaponData weapon)
-        {
-            currentWeapon = weapon;
-            currentAmmo = weapon.magazineSize;
         }
     }
 }

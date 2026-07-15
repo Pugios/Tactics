@@ -1,0 +1,28 @@
+.weapon-slot {
+    width: 72px;
+    height: 54px;
+    margin-left: 6px;
+    background-color: rgba(0, 0, 0, 0.5);
+    border-radius: 4px;
+    justify-content: center;
+    align-items: center;
+    border-width: 2px;
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.weapon-slot--active {
+    border-color: rgb(255, 70, 70);
+    background-color: rgba(255, 70, 70, 0.25);
+}
+
+.weapon-slot--empty {
+    opacity: 0.4;
+}
+
+.weapon-slot__label {
+    color: white;
+    font-size: 12px;
+    -unity-font-style: bold;
+    -unity-text-align: middle-center;
+    white-space: normal;
+}

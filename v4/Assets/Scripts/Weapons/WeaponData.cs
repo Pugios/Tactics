@@ -37,6 +37,9 @@ namespace Tactics.Weapons
         [Header("Movement")]
         public float runSpeedPercent = 1.0f; // Multiplier for player base speed
 
+        [Header("Ammo")]
+        public bool infiniteAmmo = false;
+
         [Header("Hit Level Multipliers (Relative to Head Damage)")]
         public float perfectMultiplier = 1.0f;
         public float mediumMultiplier = 0.33f;

@@ -86,13 +86,23 @@ namespace Tactics.UI
 
         private void EquipWeapon(WeaponData weapon)
         {
-            // Find the local player's WeaponController
+            // Find the local player's WeaponInventory
             // In prototype, we assume it's on the object named "Player"
             var player = GameObject.Find("Player");
             if (player != null)
             {
-                var wc = player.GetComponent<WeaponController>();
-                if (wc != null) wc.SetWeapon(weapon);
+                var inventory = player.GetComponent<WeaponInventory>();
+                if (inventory != null) inventory.Equip(SlotForWeaponType(weapon.type), weapon);
+            }
+        }
+
+        private static EquipSlot SlotForWeaponType(WeaponType type)
+        {
+            switch (type)
+            {
+                case WeaponType.Sidearm: return EquipSlot.Sidearm;
+                case WeaponType.Melee: return EquipSlot.Melee;
+                default: return EquipSlot.Primary;
             }
         }
 
