@@ -73,13 +73,16 @@ namespace Tactics.Weapons
         {
             isReloading = true;
 
-            // "Removing the bullets from the magazine"
-            inventory.SetActiveAmmo(0);
+            int ammoBeforeReload = inventory.GetActiveAmmo();
 
             var weapon = CurrentWeapon;
             yield return new WaitForSeconds(weapon.reloadSpeed);
 
-            inventory.SetActiveAmmo(weapon.magazineSize);
+            int neededToFill = weapon.magazineSize - ammoBeforeReload;
+            int toLoad = Mathf.Min(neededToFill, inventory.GetActiveReserve());
+
+            inventory.SetActiveReserve(inventory.GetActiveReserve() - toLoad);
+            inventory.SetActiveAmmo(ammoBeforeReload + toLoad);
             isReloading = false;
         }
 

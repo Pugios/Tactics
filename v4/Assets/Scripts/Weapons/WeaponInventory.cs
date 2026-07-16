@@ -12,12 +12,14 @@ namespace Tactics.Weapons
     public class WeaponInventory : MonoBehaviour
     {
         [SerializeField] private WeaponData defaultMelee;
+        [SerializeField] private WeaponData defaultSidearm;
         [SerializeField] private GameObject spikePickupPrefab;
 
         private class SlotState
         {
             public WeaponData Data;
             public int Ammo;
+            public int Reserve;
         }
 
         private readonly SlotState primary = new SlotState();
@@ -54,6 +56,7 @@ namespace Tactics.Weapons
             slot4Action = InputSystem.actions.FindAction("Slot4");
 
             if (defaultMelee != null) Equip(EquipSlot.Melee, defaultMelee);
+            if (defaultSidearm != null) Equip(EquipSlot.Sidearm, defaultSidearm);
             ActiveSlot = EquipSlot.Melee;
             OnActiveWeaponChanged?.Invoke();
         }
@@ -86,6 +89,7 @@ namespace Tactics.Weapons
 
             state.Data = data;
             state.Ammo = data.magazineSize;
+            state.Reserve = data.reserveAmmo;
 
             if (slot == ActiveSlot) OnActiveWeaponChanged?.Invoke();
             OnInventoryChanged?.Invoke();
@@ -127,6 +131,20 @@ namespace Tactics.Weapons
             var state = GetState(ActiveSlot);
             if (state == null) return;
             state.Ammo = ammo;
+            OnAmmoChanged?.Invoke();
+        }
+
+        public int GetActiveReserve()
+        {
+            var state = GetState(ActiveSlot);
+            return state?.Reserve ?? 0;
+        }
+
+        public void SetActiveReserve(int reserve)
+        {
+            var state = GetState(ActiveSlot);
+            if (state == null) return;
+            state.Reserve = reserve;
             OnAmmoChanged?.Invoke();
         }
 

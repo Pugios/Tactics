@@ -516,4 +516,5 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Tactics::Tactics.Weapons.WeaponInventory
   defaultMelee: {fileID: 11400000, guid: b8bcabfb866ebe44da0dd4ecd9ecedf1, type: 2}
+  defaultSidearm: {fileID: 11400000, guid: 7c04a2cb8a527a24a9be0c170a7e2993, type: 2}
   spikePickupPrefab: {fileID: 7989948917243882802, guid: 309e62c590df14d4d849f83ff86a1736, type: 3}

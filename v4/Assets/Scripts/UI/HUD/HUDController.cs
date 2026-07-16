@@ -98,7 +98,7 @@ namespace Tactics.UI
             if (weaponController != null && weaponController.CurrentWeapon != null)
             {
                 magAmmoLabel.text = weaponController.CurrentAmmo.ToString();
-                reserveAmmoLabel.text = weaponController.CurrentWeapon.reserveAmmo.ToString();
+                reserveAmmoLabel.text = weaponInventory != null ? weaponInventory.GetActiveReserve().ToString() : "-";
             }
             else
             {
