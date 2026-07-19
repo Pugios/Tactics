@@ -1,3 +1,4 @@
+using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using Tactics.Core;
@@ -6,7 +7,7 @@ using Tactics.Weapons;
 namespace Tactics.Objectives
 {
     [RequireComponent(typeof(WeaponInventory))]
-    public class SpikeController : MonoBehaviour
+    public class SpikeController : NetworkBehaviour
     {
         [Header("Settings")]
         [SerializeField] private float plantTime = 4f;
@@ -23,6 +24,11 @@ namespace Tactics.Objectives
         {
             interactAction = InputSystem.actions.FindAction("Interact");
             inventory = GetComponent<WeaponInventory>();
+        }
+
+        public override void OnNetworkSpawn()
+        {
+            if (!IsOwner) enabled = false;
         }
 
         private void Update()
@@ -70,10 +76,23 @@ namespace Tactics.Objectives
         {
             if (inventory == null || !inventory.ConsumeSpike()) return;
 
-            GameObject spikeObj = Instantiate(spikePrefab, transform.position, Quaternion.identity);
-            currentSpike = spikeObj.GetComponent<Spike>();
-            currentSpike.Plant();
+            PlantSpikeServerRpc();
             interactTimer = 0;
+        }
+
+        [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Owner)]
+        private void PlantSpikeServerRpc()
+        {
+            // Server-spawned so every client sees the planted spike. currentSpike is
+            // picked up on each client via OnTriggerEnter when the replicated copy
+            // appears inside the proximity trigger.
+            GameObject spikeObj = Instantiate(spikePrefab, transform.position, Quaternion.identity);
+            spikeObj.GetComponent<NetworkObject>().Spawn();
+            spikeObj.GetComponent<Spike>().Plant();
+
+            // Keep the server's copy of the inventory truthful (the owner already
+            // consumed its local copy before sending this RPC).
+            GetComponent<WeaponInventory>()?.ServerClearSpike();
         }
 
         private void OnTriggerEnter(Collider other)

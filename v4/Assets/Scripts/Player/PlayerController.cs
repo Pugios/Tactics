@@ -1,3 +1,4 @@
+using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using Tactics.Vision;
@@ -5,15 +6,8 @@ using Tactics.Vision;
 namespace Tactics.Player
 {
     [RequireComponent(typeof(CharacterController))]
-    public class PlayerController : MonoBehaviour
+    public class PlayerController : NetworkBehaviour
     {
-        [Header("Movement Settings")]
-        [SerializeField] private float runSpeed = 5.4f; // Typical Valorant speed
-        [SerializeField] private float walkSpeedMultiplier = 0.5f;
-        [SerializeField] private float crouchSpeedMultiplier = 0.3f;
-        [SerializeField] private float gravity = -9.81f;
-
-        private CharacterController characterController;
         private UnityEngine.Camera mainCamera;
 
         private InputAction moveAction;
@@ -24,15 +18,14 @@ namespace Tactics.Player
         private Vector2 moveInput;
         private bool isWalking;
         private bool isCrouching;
-        private float verticalVelocity;
 
-        private Tactics.Sound.SoundEmitter soundEmitter;
+        public Vector2 MoveInput => moveInput;
+        public bool IsWalking => isWalking;
+        public bool IsCrouching => isCrouching;
 
         private void Awake()
         {
-            characterController = GetComponent<CharacterController>();
             mainCamera = UnityEngine.Camera.main;
-            soundEmitter = GetComponent<Tactics.Sound.SoundEmitter>();
         }
 
         private void Start()
@@ -43,11 +36,25 @@ namespace Tactics.Player
             centerCameraAction = InputSystem.actions.FindAction("CenterCamera");
         }
 
+        public override void OnNetworkSpawn()
+        {
+            if (!IsOwner)
+            {
+                enabled = false;
+                return;
+            }
+
+            var tdCam = UnityEngine.Camera.main != null
+                ? UnityEngine.Camera.main.GetComponent<Tactics.Camera.TopDownCamera>()
+                : null;
+            if (tdCam != null) tdCam.SetTarget(transform);
+        }
+
         private void Update()
         {
             HandleCenterCamera();
             HandleRotation();
-            HandleMovement();
+            SampleInput();
         }
 
         private void HandleCenterCamera()
@@ -144,36 +151,11 @@ namespace Tactics.Player
             return false;
         }
 
-        private void HandleMovement()
+        private void SampleInput()
         {
             moveInput = moveAction.ReadValue<Vector2>();
             isWalking = walkAction.IsPressed();
             isCrouching = crouchAction.IsPressed();
-
-            float currentSpeed = runSpeed;
-            if (isCrouching) currentSpeed *= crouchSpeedMultiplier;
-            else if (isWalking) currentSpeed *= walkSpeedMultiplier;
-
-            // Move relative to player facing
-            Vector3 movement = (transform.forward * moveInput.y + transform.right * moveInput.x).normalized;
-
-            if (characterController.isGrounded)
-            {
-                verticalVelocity = -0.5f; // Keep grounded
-                
-                // Sound logic
-                if (movement.sqrMagnitude > 0.01f && !isWalking && !isCrouching)
-                {
-                    if (soundEmitter != null) soundEmitter.EmitMoveSound(true);
-                }
-            }
-            else
-            {
-                verticalVelocity += gravity * Time.deltaTime;
-            }
-
-            Vector3 finalMove = movement * currentSpeed + Vector3.up * verticalVelocity;
-            characterController.Move(finalMove * Time.deltaTime);
         }
     }
 }

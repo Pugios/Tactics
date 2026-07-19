@@ -1,13 +1,16 @@
+using Unity.Netcode;
 using UnityEngine;
 
 namespace Tactics.Player
 {
-    public class PlayerRespawn : MonoBehaviour
+    public class PlayerRespawn : NetworkBehaviour
     {
         [Header("Respawn Settings")]
         [SerializeField] private float outOfBoundsY = -10f;
         [SerializeField] private Vector3 defaultSpawnPosition = new Vector3(-20f, 17f, 8f);
-        
+
+        public Vector3 DefaultSpawnPosition => defaultSpawnPosition;
+
         private CharacterController characterController;
         private Vector3 lastGroundedPosition;
 
@@ -20,6 +23,11 @@ namespace Tactics.Player
         private void Start()
         {
             RespawnTo(defaultSpawnPosition);
+        }
+
+        public override void OnNetworkSpawn()
+        {
+            if (!IsOwner) enabled = false;
         }
 
         private void Update()

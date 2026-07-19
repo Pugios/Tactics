@@ -1,3 +1,4 @@
+using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.UIElements;
 using Tactics.Weapons;
@@ -51,8 +52,9 @@ namespace Tactics.UI
 
         private void FindWeaponController()
         {
-            var player = GameObject.Find("Player");
-            if (player == null) return;
+            var nm = NetworkManager.Singleton;
+            if (nm == null || nm.LocalClient.PlayerObject == null) return;
+            var player = nm.LocalClient.PlayerObject.gameObject;
 
             if (weaponController == null)
             {

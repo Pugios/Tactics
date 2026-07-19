@@ -1,62 +1,94 @@
 using UnityEngine;
 using System;
+using Unity.Netcode;
 
 namespace Tactics.Combat
 {
-    public class Health : MonoBehaviour
+    /// <summary>
+    /// Server-authoritative health. Only the server may mutate it (the mutators
+    /// are no-ops everywhere else); values replicate to every peer via
+    /// NetworkVariables, and the events fire on every peer when the replicated
+    /// values change — subscribe locally for HUD and death reactions.
+    /// </summary>
+    public class Health : NetworkBehaviour
     {
         [SerializeField] private int maxHealth = 100;
-        private int currentHealth;
-        private int currentShield;
-        private int maxShield;
+
+        private readonly NetworkVariable<int> currentHealth = new NetworkVariable<int>();
+        private readonly NetworkVariable<int> currentShield = new NetworkVariable<int>();
+        private readonly NetworkVariable<int> maxShield = new NetworkVariable<int>();
 
         public event Action<int, int> OnHealthChanged;
         public event Action<int, int> OnShieldChanged;
         public event Action OnDeath;
 
-        private void Awake()
+        public bool IsDead => currentHealth.Value <= 0;
+
+        public override void OnNetworkSpawn()
         {
-            currentHealth = maxHealth;
+            if (IsServer) currentHealth.Value = maxHealth;
+
+            currentHealth.OnValueChanged += HandleHealthChanged;
+            currentShield.OnValueChanged += HandleShieldChanged;
+        }
+
+        public override void OnNetworkDespawn()
+        {
+            currentHealth.OnValueChanged -= HandleHealthChanged;
+            currentShield.OnValueChanged -= HandleShieldChanged;
+        }
+
+        private void HandleHealthChanged(int previous, int current)
+        {
+            OnHealthChanged?.Invoke(current, maxHealth);
+            if (current <= 0 && previous > 0) OnDeath?.Invoke();
+        }
+
+        private void HandleShieldChanged(int previous, int current)
+        {
+            OnShieldChanged?.Invoke(current, maxShield.Value);
         }
 
         public void TakeDamage(int amount)
         {
-            if (currentShield > 0)
+            if (!IsServer || IsDead) return;
+
+            if (currentShield.Value > 0)
             {
-                // Shield absorbs 66% or 100%? In Valorant, it absorbs a portion or full until depleted.
-                // Light Shield (25), Heavy (50).
-                int shieldDamage = Mathf.Min(currentShield, amount);
-                currentShield -= shieldDamage;
+                int shieldDamage = Mathf.Min(currentShield.Value, amount);
+                currentShield.Value -= shieldDamage;
                 amount -= shieldDamage;
-                OnShieldChanged?.Invoke(currentShield, maxShield);
             }
 
             if (amount > 0)
             {
-                currentHealth = Mathf.Max(0, currentHealth - amount);
-                OnHealthChanged?.Invoke(currentHealth, maxHealth);
-
-                if (currentHealth <= 0)
-                {
-                    OnDeath?.Invoke();
-                }
+                currentHealth.Value = Mathf.Max(0, currentHealth.Value - amount);
             }
         }
 
         public void AddShield(int amount)
         {
-            maxShield = amount;
-            currentShield = amount;
-            OnShieldChanged?.Invoke(currentShield, maxShield);
+            if (!IsServer) return;
+            maxShield.Value = amount;
+            currentShield.Value = amount;
         }
 
         public void Heal(int amount)
         {
-            currentHealth = Mathf.Min(maxHealth, currentHealth + amount);
-            OnHealthChanged?.Invoke(currentHealth, maxHealth);
+            if (!IsServer || IsDead) return;
+            currentHealth.Value = Mathf.Min(maxHealth, currentHealth.Value + amount);
         }
 
-        public int GetCurrentHealth() => currentHealth;
-        public int GetCurrentShield() => currentShield;
+        /// <summary>Restores full health and clears shields (respawn).</summary>
+        public void ServerRevive()
+        {
+            if (!IsServer) return;
+            currentShield.Value = 0;
+            maxShield.Value = 0;
+            currentHealth.Value = maxHealth;
+        }
+
+        public int GetCurrentHealth() => currentHealth.Value;
+        public int GetCurrentShield() => currentShield.Value;
     }
 }

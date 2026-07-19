@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Unity.Netcode;
 using UnityEngine;
 
 namespace Tactics.Vision
@@ -8,13 +9,18 @@ namespace Tactics.Vision
     /// </summary>
     [RequireComponent(typeof(VisionController))]
     [DefaultExecutionOrder(101)]
-    public class EntityVisibilityDriver : MonoBehaviour
+    public class EntityVisibilityDriver : NetworkBehaviour
     {
         private VisionController visionController;
 
         private void Awake()
         {
             visionController = GetComponent<VisionController>();
+        }
+
+        public override void OnNetworkSpawn()
+        {
+            if (!IsOwner) enabled = false;
         }
 
         private void LateUpdate()

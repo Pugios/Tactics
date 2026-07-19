@@ -14,6 +14,9 @@ GameObject:
   - component: {fileID: 2820225822388326989}
   - component: {fileID: 4918772613445402306}
   - component: {fileID: 3452378711052876527}
+  - component: {fileID: 1530668327537398}
+  - component: {fileID: 1530668327537399}
+  - component: {fileID: 1530668327537400}
   m_Layer: 9
   m_Name: TargetDummy
   m_TagString: Untagged
@@ -145,3 +148,40 @@ MonoBehaviour:
   feetTransform: {fileID: 0}
   heightOverride: -1
   radiusOverride: -1
+--- !u!114 &1530668327537398
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8747852200803307993}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+--- !u!114 &1530668327537399
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8747852200803307993}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4f7d21c96b3ae874a9d05c1f82ab6e37, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  reviveDelay: 3
+--- !u!114 &1530668327537400
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8747852200803307993}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 91c4e8b57a2f36d4bbf0a9c8d1e5f742, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:

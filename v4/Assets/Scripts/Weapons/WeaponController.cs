@@ -1,22 +1,45 @@
+using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using Tactics.Combat;
 
 namespace Tactics.Weapons
 {
+    /// <summary>
+    /// Shooting is server-authoritative: the owner runs fire-rate/ammo checks for
+    /// responsiveness and sends the aim point to the server, which re-validates
+    /// the cadence, resolves the hit against its own world state, and applies
+    /// damage through the replicated <see cref="Health"/>. Weapons cross the
+    /// network as an index into <see cref="weaponRegistry"/> so the server reads
+    /// stats from its own copy and a client can't invent damage values.
+    /// Lag compensation: hits are resolved against each target's
+    /// <see cref="HitboxHistory"/> rewound by the shooter's RTT + interpolation
+    /// delay, so shots count where the shooter saw the target.
+    /// </summary>
     [RequireComponent(typeof(WeaponInventory))]
     [DisallowMultipleComponent]
-    public class WeaponController : MonoBehaviour
+    public class WeaponController : NetworkBehaviour
     {
         [SerializeField] private Transform shootPoint;
         [SerializeField] private LayerMask hitLayers;
+        [SerializeField] private WeaponData[] weaponRegistry;
+
+        private const float MaxWallPenetrationMeters = 1f;
+        private const float HitRadius = 1f; // widest damage ring (leg shot)
+        private const float FireRateLeniency = 0.85f; // server cadence check tolerates network jitter
+        private const float MaxRewindSeconds = 1f; // lag-comp favor-the-shooter cap
 
         private WeaponInventory inventory;
+        private Health ownHealth;
+        private Tactics.Player.PlayerMovementNetwork movementNetwork;
         private InputAction attackAction;
         private InputAction reloadAction;
         private float lastFireTime;
         private bool isReloading;
         private Tactics.Sound.SoundEmitter soundEmitter;
+
+        // Server-side fire cadence tracking, one per player object.
+        private double serverLastFireTime = double.NegativeInfinity;
 
         public int CurrentAmmo => inventory != null ? inventory.GetActiveAmmo() : 0;
         public WeaponData CurrentWeapon => inventory != null ? inventory.GetActiveWeaponData() : null;
@@ -26,6 +49,13 @@ namespace Tactics.Weapons
         private void Awake()
         {
             inventory = GetComponent<WeaponInventory>();
+            ownHealth = GetComponent<Health>();
+            movementNetwork = GetComponent<Tactics.Player.PlayerMovementNetwork>();
+        }
+
+        public override void OnNetworkSpawn()
+        {
+            if (!IsOwner) enabled = false;
         }
 
         private void Start()
@@ -103,102 +133,183 @@ namespace Tactics.Weapons
 
             if (soundEmitter != null) soundEmitter.EmitShootSound();
 
-            // 1. Mouse Target Detection
+            // The aim point (world position under the mouse) can only be computed
+            // on the owner's machine — the server has no camera. Everything past
+            // this point is the server's job.
             if (UnityEngine.Camera.main == null) return;
             Ray cameraRay = UnityEngine.Camera.main.ScreenPointToRay(Mouse.current.position.ReadValue());
-            Health target = null;
-            Vector3 mouseWorldPosition = Vector3.zero;
-
-            if (Physics.Raycast(cameraRay, out RaycastHit cameraHit, 1000f))
-            {
-                mouseWorldPosition = cameraHit.point;
-                target = cameraHit.collider.GetComponent<Health>();
-            }
+            if (!Physics.Raycast(cameraRay, out RaycastHit cameraHit, 1000f)) return;
+            Vector3 aimPoint = cameraHit.point;
 
             Vector3 startPoint = shootPoint != null ? shootPoint.position : transform.position;
+            Debug.DrawRay(startPoint, aimPoint - startPoint, Color.red, 0.1f);
 
-            // 2. Trajectory & Wall Penetration
-            if (target != null)
+            int weaponId = System.Array.IndexOf(weaponRegistry, currentWeapon);
+            if (weaponId < 0)
             {
-                Vector3 direction = (mouseWorldPosition - startPoint).normalized;
-                float distanceToTarget = Vector3.Distance(startPoint, mouseWorldPosition);
+                Debug.LogWarning($"[Weapon] {currentWeapon.name} is missing from the weapon registry; shot not sent.");
+                return;
+            }
 
-                int wallLayer = 6;
-                int wallLayerMask = 1 << wallLayer;
-                RaycastHit[] wallHits = Physics.RaycastAll(startPoint, direction, distanceToTarget, wallLayerMask);
+            ShootServerRpc(aimPoint, weaponId);
+        }
 
-                float totalThickness = 0f;
-                foreach (var hit in wallHits)
+        [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Owner)]
+        private void ShootServerRpc(Vector3 aimPoint, int weaponId)
+        {
+            if (weaponRegistry == null || weaponId < 0 || weaponId >= weaponRegistry.Length) return;
+            WeaponData weapon = weaponRegistry[weaponId];
+
+            // Cadence re-check on the server clock. Ammo/inventory ownership is
+            // still trusted client-side until the buy/economy systems are networked.
+            double now = NetworkManager.ServerTime.Time;
+            if (now - serverLastFireTime < (1.0 / weapon.fireRate) * FireRateLeniency) return;
+            serverLastFireTime = now;
+
+            // The shooter fires from its predicted (current) position; the server's
+            // best match for that is its own sim position, not the smoothed view
+            // transform.
+            Vector3 startPoint = movementNetwork != null ? movementNetwork.AuthoritativePosition : transform.position;
+            ResolveHitServer(weapon, startPoint, aimPoint, ComputeRewindTime());
+        }
+
+        /// <summary>
+        /// Lag compensation: the positions the shooter was looking at left the
+        /// server one downstream trip ago and were rendered a further interpolation
+        /// delay in the past, and the shot spent an upstream trip getting here.
+        /// Rewind hit resolution by RTT + interpolation delay (server-measured, so
+        /// clients can't spoof it), capped at MaxRewindSeconds.
+        /// </summary>
+        private float ComputeRewindTime()
+        {
+            float rtt = NetworkManager.NetworkConfig.NetworkTransport.GetCurrentRtt(OwnerClientId) / 1000f;
+            float interpolationDelay = (movementNetwork != null ? movementNetwork.InterpolationDelayTicks : 3f)
+                * NetworkManager.LocalTime.FixedDeltaTime;
+            float rewind = Mathf.Min(rtt + interpolationDelay, MaxRewindSeconds);
+            return Time.time - rewind;
+        }
+
+        private void ResolveHitServer(WeaponData weapon, Vector3 startPoint, Vector3 aimPoint, float rewindTime)
+        {
+            Health target = FindClosestTarget(aimPoint, rewindTime, out Vector3 targetPos);
+            if (target == null) return;
+
+            Vector3 direction = (aimPoint - startPoint).normalized;
+            float distanceToTarget = Vector3.Distance(startPoint, aimPoint);
+            float totalThickness = ComputeWallThickness(startPoint, direction, distanceToTarget);
+            if (totalThickness > MaxWallPenetrationMeters) return;
+
+            // Proximity damage rings on the XZ plane around the target's rewound
+            // position — where the shooter saw them, not where they are now.
+            float xzDistance = Vector2.Distance(new Vector2(aimPoint.x, aimPoint.z),
+                                                new Vector2(targetPos.x, targetPos.z));
+
+            float hitMultiplier = 0f;
+            bool isPerfect = false;
+
+            if (xzDistance < 0.5f)
+            {
+                hitMultiplier = weapon.perfectMultiplier;
+                isPerfect = true;
+            }
+            else if (xzDistance < 0.75f)
+            {
+                hitMultiplier = weapon.mediumMultiplier;
+            }
+            else if (xzDistance < 1f)
+            {
+                hitMultiplier = weapon.lowMultiplier;
+            }
+
+            if (hitMultiplier <= 0f) return;
+
+            // Linear falloff with in-wall distance: 0.5m of wall halves the damage,
+            // MaxWallPenetrationMeters of accumulated wall stops the bullet.
+            float finalDamage = weapon.headDamage * hitMultiplier * (1f - totalThickness / MaxWallPenetrationMeters);
+            if (finalDamage <= 0f) return;
+
+            int damage = (int)finalDamage;
+            target.TakeDamage(damage);
+
+            string hitType = isPerfect ? "perfect" : "body";
+            string wallbang = totalThickness > 0 ? $", wallbang (thickness {totalThickness:F2}m)" : "";
+            Debug.Log($"[Damage] {damage} to {target.name} ({hitType}{wallbang})");
+
+            HitConfirmOwnerRpc(damage, isPerfect);
+        }
+
+        private Health FindClosestTarget(Vector3 aimPoint, float rewindTime, out Vector3 rewoundPosition)
+        {
+            // The damage model is purely positional (XZ rings around the aim
+            // point), so lag compensation needs no physics-scene rewind — just
+            // each candidate's recorded position at the rewind time.
+            Health best = null;
+            float bestXzDistance = HitRadius;
+            rewoundPosition = Vector3.zero;
+
+            foreach (var history in HitboxHistory.All)
+            {
+                Health health = history.Health;
+                if (health == null || health == ownHealth || health.IsDead) continue;
+
+                Vector3 pos = history.GetPositionAt(rewindTime);
+                float xzDistance = Vector2.Distance(new Vector2(aimPoint.x, aimPoint.z),
+                                                    new Vector2(pos.x, pos.z));
+                if (xzDistance < bestXzDistance)
                 {
-                    // Secondary raycast from the 'back' of the wall
-                    // Use a slightly larger distance than max penetration (1.0m) to find the exit
-                    Vector3 backStart = hit.point + direction * 2f;
+                    bestXzDistance = xzDistance;
+                    best = health;
+                    rewoundPosition = pos;
+                }
+            }
 
-                    // Shoot backwards and find all hits to identify the exit point of the same collider
-                    RaycastHit[] backHits = Physics.RaycastAll(backStart, -direction, 2f, wallLayerMask);
-                    foreach (var backHit in backHits)
-                    {
-                        if (backHit.collider == hit.collider)
-                        {
-                            totalThickness += Vector3.Distance(hit.point, backHit.point);
-                            break;
-                        }
-                    }
+            return best;
+        }
+
+        /// <summary>
+        /// Total distance the shot travels inside Wall-layer geometry, measured as
+        /// the true path length between each wall's entry and exit face — angled
+        /// shots that enter the front of a cube and leave through a side measure
+        /// the same way as straight-through shots. Returns +infinity when the
+        /// bullet never exits a wall before reaching the target (stopped).
+        /// </summary>
+        private static float ComputeWallThickness(Vector3 startPoint, Vector3 direction, float distance)
+        {
+            int wallLayerMask = 1 << Tactics.Vision.VisionLayerMasks.Wall;
+
+            // Raycasts only report front faces, so exit faces are found by casting
+            // the same segment in reverse from the target end.
+            RaycastHit[] entries = Physics.RaycastAll(startPoint, direction, distance, wallLayerMask);
+            if (entries.Length == 0) return 0f;
+            Vector3 endPoint = startPoint + direction * distance;
+            RaycastHit[] exits = Physics.RaycastAll(endPoint, -direction, distance, wallLayerMask);
+
+            float totalThickness = 0f;
+            foreach (var entry in entries)
+            {
+                // Both distances measured from startPoint along the shot.
+                float entryDistance = entry.distance;
+                float exitDistance = -1f;
+                foreach (var exit in exits)
+                {
+                    if (exit.collider != entry.collider) continue;
+                    float candidate = distance - exit.distance;
+                    if (candidate > entryDistance && candidate > exitDistance) exitDistance = candidate;
                 }
 
-                if (totalThickness <= 1.0f)
-                {
-                    // 3. Proximity Damage (XZ plane)
-                    Vector3 targetPos = target.transform.position;
-                    float xzDistance = Vector2.Distance(new Vector2(mouseWorldPosition.x, mouseWorldPosition.z),
-                                                        new Vector2(targetPos.x, targetPos.z));
+                // No exit before the target: the bullet ends inside this wall.
+                if (exitDistance < 0f) return float.PositiveInfinity;
 
-                    float hitMultiplier = 0f;
-                    bool isPerfect = false;
-
-                    // "Head" Perfect Shot
-                    if (xzDistance < 0.5f)
-                    {
-                        hitMultiplier = currentWeapon.perfectMultiplier;
-                        isPerfect = true;
-                    }
-                    // "Body" Medium Shot
-                    else if (xzDistance < 0.75f)
-                    {
-                        hitMultiplier = currentWeapon.mediumMultiplier;
-                    }
-                    // "Leg" Low Shot
-                    else if (xzDistance < 1f)
-                    {
-                        hitMultiplier = currentWeapon.lowMultiplier;
-                    }
-
-                    if (hitMultiplier > 0)
-                    {
-                        // 4. Damage Calculation
-                        float finalDamage = currentWeapon.headDamage * hitMultiplier * (1.0f - totalThickness);
-                        if (finalDamage > 0)
-                        {
-                            int damage = (int)finalDamage;
-                            target.TakeDamage(damage);
-
-                            string hitType = isPerfect ? "perfect" : "body";
-                            string wallbang = totalThickness > 0 ? $", wallbang (thickness {totalThickness:F2}m)" : "";
-                            Debug.Log($"[Damage] {damage} to {target.name} ({hitType}{wallbang})");
-                        }
-                    }
-                }
-
-                // 5. Visual Feedback
-                Debug.DrawRay(startPoint, direction * distanceToTarget, Color.red, 0.1f);
+                totalThickness += exitDistance - entryDistance;
             }
-            else
-            {
-                // Fallback visual feedback if no target found
-                Vector3 direction = (mouseWorldPosition != Vector3.zero) ? (mouseWorldPosition - startPoint).normalized : transform.forward;
-                float distance = (mouseWorldPosition != Vector3.zero) ? Vector3.Distance(startPoint, mouseWorldPosition) : 100f;
-                Debug.DrawRay(startPoint, direction * distance, Color.black, 0.1f);
-            }
+
+            return totalThickness;
+        }
+
+        [Rpc(SendTo.Owner)]
+        private void HitConfirmOwnerRpc(int damage, bool isPerfect)
+        {
+            Debug.Log($"[Damage] Hit confirmed: {damage} ({(isPerfect ? "perfect" : "normal")})");
         }
     }
 }

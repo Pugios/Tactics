@@ -47,9 +47,16 @@ The most complex subsystem. Two parallel layers cooperate:
 
 **Layer indices** (`VisionLayerMasks`): Wall=6, Ground=7, Dynamic=9. Props are split into Wall (sides) + Ground (top face) child colliders so players can aim onto prop surfaces.
 
-### Combat
-- `Health` — takes damage with shield-first absorption; fires `OnHealthChanged`, `OnShieldChanged`, `OnDeath`.
-- `WeaponController` — raycast shooting with wall-penetration thickness check (max 1 m). Damage zones are proximity-based on the XZ plane: head (<0.5m), body (<0.75m), leg (<1m). Uses `WeaponData` ScriptableObject for stats.
+### Combat (server-authoritative)
+- `Health` — `NetworkBehaviour`; server-only mutators (`TakeDamage`, `AddShield`, `Heal`, `ServerRevive`) with shield-first absorption, replicated via `NetworkVariable`s; `OnHealthChanged`/`OnShieldChanged`/`OnDeath` fire on every peer from the replicated values.
+- `WeaponController` — owner computes the aim point (world position under the mouse) and sends `ShootServerRpc(aimPoint, weaponId)`; the server re-validates fire cadence, resolves the hit against its own world (wall-penetration thickness check max 1 m; proximity damage rings on the XZ plane: head <0.5m, body <0.75m, leg <1m), and applies damage. `weaponId` indexes the `weaponRegistry` array serialized on the Player prefab so the server reads stats from its own `WeaponData` copy. Ammo/inventory are still client-trusted until the buy/economy systems are networked.
+- **Lag compensation**: `HitboxHistory` (on Player and TargetDummy prefabs) records each entity's authoritative position per network tick, server-side only, in a static `All` registry. `WeaponController.ShootServerRpc` rewinds hit resolution by the shooter's transport RTT + remote-view interpolation delay (server-measured — clients never send timestamps), capped at 1 s. The damage model is positional (XZ rings), so no physics-scene rewind is needed. Histories are wiped on `ServerTeleport` so rewound shots can't hit vacated respawn corpses.
+- Player death → `PlayerMovementNetwork.ServerHandleDeath` teleports to spawn and revives one frame later (so spike drop sees the corpse position). Target dummies use `AutoRevive` instead.
+
+### Netcode
+- `PlayerMovementNetwork` — server-authoritative movement with owner prediction/reconciliation, remote-view snapshot interpolation (`interpolationDelayTicks` behind newest), and `ServerTeleport` (bumps `TeleportCount` in the snapshot so owners clear prediction and views cut instead of gliding). **All movement must go through `Simulate()`** or reconciliation reverts it; `ServerTeleport` is the one sanctioned exception.
+- `NetworkSpawnMarker` — scene marker that server-spawns a registered network prefab at its own transform on session start (used for the spike pickup and target dummies; in-scene-placed NetworkObjects are avoided because despawn-destroying them is discouraged by NGO).
+- Spike carry state exists twice: the owner's local `HasSpike` (HUD/plant checks) and the server instance's `HasSpike` (authoritative — granted in `SpikePickup.TryGrant`, cleared via `ServerClearSpike` on plant/death).
 
 ### Economy (`EconomyManager`)
 Valorant-style cred system: round-win (3000), loss-streak bonuses (1900/2400/2900), kill reward (200), plant reward (300). Halftime resets to 800. Fires `OnCredsChanged`.

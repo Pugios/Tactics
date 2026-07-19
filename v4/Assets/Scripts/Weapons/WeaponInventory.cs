@@ -1,3 +1,4 @@
+using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using System;
@@ -9,7 +10,7 @@ namespace Tactics.Weapons
 
     [RequireComponent(typeof(WeaponController))]
     [DisallowMultipleComponent]
-    public class WeaponInventory : MonoBehaviour
+    public class WeaponInventory : NetworkBehaviour
     {
         [SerializeField] private WeaponData defaultMelee;
         [SerializeField] private WeaponData defaultSidearm;
@@ -40,12 +41,28 @@ namespace Tactics.Weapons
         public event Action OnAmmoChanged;
         public event Action<bool> OnSpikeChanged;
 
+        private Health health;
+
         private void Awake()
         {
             weaponController = GetComponent<WeaponController>();
+            health = GetComponent<Health>();
+        }
 
-            var health = GetComponent<Health>();
-            if (health != null) health.OnDeath += () => TryDropSpikeOnDeath(transform.position);
+        public override void OnNetworkSpawn()
+        {
+            if (!IsOwner) enabled = false;
+
+            // Death drop is server-authoritative: the server instance's HasSpike
+            // mirrors reality because pickups are granted server-side
+            // (SpikePickup.TryGrant) and plants are consumed server-side
+            // (SpikeController.PlantSpikeServerRpc).
+            if (IsServer && health != null) health.OnDeath += ServerHandleDeathDrop;
+        }
+
+        public override void OnNetworkDespawn()
+        {
+            if (IsServer && health != null) health.OnDeath -= ServerHandleDeathDrop;
         }
 
         private void Start()
@@ -156,6 +173,17 @@ namespace Tactics.Weapons
             return true;
         }
 
+        /// <summary>
+        /// Called by the server when it awards this player a spike pickup, so the
+        /// owning client's local inventory (which drives HUD and plant checks)
+        /// learns about it. Executes locally when the owner is the host.
+        /// </summary>
+        [Rpc(SendTo.Owner)]
+        public void GrantSpikeOwnerRpc()
+        {
+            TryPickupSpike();
+        }
+
         public bool ConsumeSpike()
         {
             if (!HasSpike) return false;
@@ -165,15 +193,45 @@ namespace Tactics.Weapons
             return true;
         }
 
-        public bool TryDropSpikeOnDeath(Vector3 position)
+        /// <summary>
+        /// Server-side bookkeeping when the spike leaves this player without the
+        /// owner initiating it locally (plant confirmation, death). Safe to call
+        /// redundantly — no-op when the spike is already gone.
+        /// </summary>
+        public void ServerClearSpike()
         {
-            if (!HasSpike) return false;
+            ClearSpikeLocal();
+        }
+
+        [Rpc(SendTo.Owner)]
+        private void ClearSpikeOwnerRpc()
+        {
+            ClearSpikeLocal();
+        }
+
+        private void ClearSpikeLocal()
+        {
+            if (!HasSpike) return;
             HasSpike = false;
             OnSpikeChanged?.Invoke(false);
             FallBackFromSpikeSlot();
+        }
 
-            if (spikePickupPrefab != null) Instantiate(spikePickupPrefab, position, Quaternion.identity);
-            return true;
+        private void ServerHandleDeathDrop()
+        {
+            if (!HasSpike) return;
+
+            Vector3 dropPosition = transform.position;
+            ServerClearSpike();
+            ClearSpikeOwnerRpc(); // owner's local copy drives HUD and plant checks
+
+            if (spikePickupPrefab != null)
+            {
+                // The prefab root's rotation carries the upright correction for the
+                // model's Blender axes — don't overwrite it with identity.
+                GameObject pickup = Instantiate(spikePickupPrefab, dropPosition, spikePickupPrefab.transform.rotation);
+                pickup.GetComponent<NetworkObject>().Spawn();
+            }
         }
 
         private void FallBackFromSpikeSlot()

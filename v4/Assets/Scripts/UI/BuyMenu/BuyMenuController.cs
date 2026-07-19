@@ -1,3 +1,4 @@
+using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.UIElements;
 using UnityEngine.InputSystem;
@@ -86,9 +87,8 @@ namespace Tactics.UI
 
         private void EquipWeapon(WeaponData weapon)
         {
-            // Find the local player's WeaponInventory
-            // In prototype, we assume it's on the object named "Player"
-            var player = GameObject.Find("Player");
+            var nm = NetworkManager.Singleton;
+            var player = nm != null && nm.LocalClient.PlayerObject != null ? nm.LocalClient.PlayerObject.gameObject : null;
             if (player != null)
             {
                 var inventory = player.GetComponent<WeaponInventory>();

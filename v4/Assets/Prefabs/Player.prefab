@@ -134,6 +134,7 @@ GameObject:
   - component: {fileID: 8564996509012003594}
   - component: {fileID: 9114870955445636514}
   - component: {fileID: 8162387438785765976}
+  - component: {fileID: 3322128165816216}
   - component: {fileID: 1562141369661307270}
   - component: {fileID: 6276122855982158245}
   - component: {fileID: 5686489343745237308}
@@ -145,6 +146,8 @@ GameObject:
   - component: {fileID: 301151471966402650}
   - component: {fileID: 6772032414193414345}
   - component: {fileID: 4365752961634913424}
+  - component: {fileID: 6531346233383104}
+  - component: {fileID: 6531346233383105}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -250,6 +253,32 @@ CharacterController:
   m_SkinWidth: 0.08
   m_MinMoveDistance: 0.001
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &3322128165816216
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8415391576674575487}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  GlobalObjectIdHash: 2942363196
+  InScenePlacedSourceGlobalObjectIdHash: 0
+  DeferredDespawnTick: 0
+  Ownership: 1
+  AlwaysReplicateAsRoot: 0
+  SynchronizeTransform: 1
+  <InScenePlaced>k__BackingField: 0
+  ActiveSceneSynchronization: 0
+  SceneMigrationSynchronization: 1
+  SpawnWithObservers: 1
+  DontDestroyWithOwner: 0
+  AutoObjectParentSync: 1
+  SyncOwnerTransformWhenParented: 1
+  AllowOwnerToParent: 0
 --- !u!114 &1562141369661307270
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -262,10 +291,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3c81a43850cc52740bd86eb1b22f4869, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ValorantTrainer.Player.PlayerController
-  runSpeed: 5.4
-  walkSpeedMultiplier: 0.5
-  crouchSpeedMultiplier: 0.3
-  gravity: -9.81
+  ShowTopMostFoldoutHeaderGroup: 1
   visionOrigin: {fileID: 2664838724357787632}
   eyeHeight: 1.5
 --- !u!114 &6276122855982158245
@@ -280,6 +306,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 39beec1e27202c440b3fea9ee21105b9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Tactics::Tactics.Vision.EntityVisibilityDriver
+  ShowTopMostFoldoutHeaderGroup: 1
 --- !u!114 &5686489343745237308
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -292,6 +319,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 125ac2e4c40fa4240909ff73aa5c15e3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Tactics::Tactics.Vision.VisionController
+  ShowTopMostFoldoutHeaderGroup: 1
   horizontalViewAngle: 103
   verticalViewAngle: 70.53
   maxViewDistance: 500
@@ -320,6 +348,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 29614bff1189f574ab503e17063ebc62, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ValorantTrainer.Player.PlayerRespawn
+  ShowTopMostFoldoutHeaderGroup: 1
   outOfBoundsY: -50
   defaultSpawnPosition: {x: -20.12, y: 12, z: 7.98}
 --- !u!114 &800970234888666417
@@ -334,6 +363,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 48b02a75410230a4eafee728d8207aab, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ValorantTrainer.Combat.Health
+  ShowTopMostFoldoutHeaderGroup: 1
   maxHealth: 100
 --- !u!114 &3091012964522157316
 MonoBehaviour:
@@ -360,6 +390,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 05597b74976d3e2459581f064045c519, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ValorantTrainer.Objectives.SpikeController
+  ShowTopMostFoldoutHeaderGroup: 1
   plantTime: 4
   defuseTime: 7
   spikePrefab: {fileID: 5305295136353650407, guid: e1e521057756e414481e11766467ce75, type: 3}
@@ -499,10 +530,17 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: da47923894d63e64fa70dc8492a9ce24, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ValorantTrainer.Weapons.WeaponController
+  ShowTopMostFoldoutHeaderGroup: 1
   shootPoint: {fileID: 0}
   hitLayers:
     serializedVersion: 2
     m_Bits: 4294967295
+  weaponRegistry:
+  - {fileID: 11400000, guid: 7c04a2cb8a527a24a9be0c170a7e2993, type: 2}
+  - {fileID: 11400000, guid: a440192ae5902c64b83bb80a27dd5b6f, type: 2}
+  - {fileID: 11400000, guid: b8bcabfb866ebe44da0dd4ecd9ecedf1, type: 2}
+  - {fileID: 11400000, guid: bca885fd75b1b754b83cc711d5358ed1, type: 2}
+  - {fileID: 11400000, guid: 2c8b3893800ff4e40bdbecfacd784baf, type: 2}
 --- !u!114 &4365752961634913424
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -515,6 +553,39 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b964f6c0e4207a34497aa630d6c46c8a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Tactics::Tactics.Weapons.WeaponInventory
+  ShowTopMostFoldoutHeaderGroup: 1
   defaultMelee: {fileID: 11400000, guid: b8bcabfb866ebe44da0dd4ecd9ecedf1, type: 2}
   defaultSidearm: {fileID: 11400000, guid: 7c04a2cb8a527a24a9be0c170a7e2993, type: 2}
-  spikePickupPrefab: {fileID: 7989948917243882802, guid: 309e62c590df14d4d849f83ff86a1736, type: 3}
+  spikePickupPrefab: {fileID: 2450181037328219431, guid: 50544b0025250eb4ea823fd620bae8e3, type: 3}
+--- !u!114 &6531346233383104
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8415391576674575487}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9cccfffd52cd3a2a98d9dace965cb7a5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ShowTopMostFoldoutHeaderGroup: 1
+  runSpeed: 5.4
+  walkSpeedMultiplier: 0.5
+  crouchSpeedMultiplier: 0.3
+  gravity: -9.81
+  positionTolerance: 0.05
+  interpolationDelayTicks: 3
+  interpolationSnapTicks: 15
+--- !u!114 &6531346233383105
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8415391576674575487}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 91c4e8b57a2f36d4bbf0a9c8d1e5f742, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:

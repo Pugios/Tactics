@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Tactics.Player;
+using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
@@ -15,7 +16,7 @@ namespace Tactics.Vision
     [RequireComponent(typeof(PlayerController))]
     [RequireComponent(typeof(EntityVisibilityDriver))]
     [DefaultExecutionOrder(100)]
-    public class VisionController : MonoBehaviour
+    public class VisionController : NetworkBehaviour
     {
         [Header("Field of View")]
         [SerializeField, Range(1f, 170f)] private float horizontalViewAngle = 103f;
@@ -61,6 +62,7 @@ namespace Tactics.Vision
         private readonly List<Renderer> selfRendererScratch = new List<Renderer>();
         private readonly List<Renderer> disabledSelfRenderers = new List<Renderer>();
         private bool warnedCaptureNotRunning;
+        private int captureWarningGraceFrame = 120;
         private Matrix4x4 eyeViewProjection;
         private Matrix4x4 eyeViewMatrix;
 
@@ -116,8 +118,23 @@ namespace Tactics.Vision
         private void Awake()
         {
             playerController = GetComponent<PlayerController>();
+        }
+
+        public override void OnNetworkSpawn()
+        {
+            if (!IsOwner) { enabled = false; return; }
+
             Active = this;
             CreateEyeResources();
+            // The player spawns on connect, not scene load — the capture-health
+            // check must measure from here, not from application startup.
+            captureWarningGraceFrame = Time.frameCount + 120;
+        }
+
+        public override void OnNetworkDespawn()
+        {
+            if (Active == this)
+                Active = null;
         }
 
         private void OnEnable()
@@ -325,7 +342,7 @@ namespace Tactics.Vision
 
         private void WarnIfCaptureNotRunning()
         {
-            if (warnedCaptureNotRunning || Time.frameCount < 120)
+            if (warnedCaptureNotRunning || Time.frameCount < captureWarningGraceFrame)
                 return;
 
             if (VisionEyeDepthCapturePass.LastCaptureFrameCount < Time.frameCount - 60)
