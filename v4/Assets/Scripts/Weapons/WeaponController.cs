@@ -191,7 +191,7 @@ namespace Tactics.Weapons
 
         private void ResolveHitServer(WeaponData weapon, Vector3 startPoint, Vector3 aimPoint, float rewindTime)
         {
-            Health target = FindClosestTarget(aimPoint, rewindTime, out Vector3 targetPos);
+            Health target = FindClosestTarget(aimPoint, rewindTime, out Vector3 targetPos, out bool targetGrounded);
             if (target == null) return;
 
             Vector3 direction = (aimPoint - startPoint).normalized;
@@ -226,6 +226,11 @@ namespace Tactics.Weapons
             // Linear falloff with in-wall distance: 0.5m of wall halves the damage,
             // MaxWallPenetrationMeters of accumulated wall stops the bullet.
             float finalDamage = weapon.headDamage * hitMultiplier * (1f - totalThickness / MaxWallPenetrationMeters);
+
+            // Jump peeking is rewarded with a flat damage reduction while airborne,
+            // judged at the same rewound moment as the rest of the hit resolution.
+            if (!targetGrounded) finalDamage *= 0.5f;
+
             if (finalDamage <= 0f) return;
 
             int damage = (int)finalDamage;
@@ -238,7 +243,7 @@ namespace Tactics.Weapons
             HitConfirmOwnerRpc(damage, isPerfect);
         }
 
-        private Health FindClosestTarget(Vector3 aimPoint, float rewindTime, out Vector3 rewoundPosition)
+        private Health FindClosestTarget(Vector3 aimPoint, float rewindTime, out Vector3 rewoundPosition, out bool rewoundGrounded)
         {
             // The damage model is purely positional (XZ rings around the aim
             // point), so lag compensation needs no physics-scene rewind — just
@@ -246,6 +251,7 @@ namespace Tactics.Weapons
             Health best = null;
             float bestXzDistance = HitRadius;
             rewoundPosition = Vector3.zero;
+            rewoundGrounded = true;
 
             foreach (var history in HitboxHistory.All)
             {
@@ -260,6 +266,7 @@ namespace Tactics.Weapons
                     bestXzDistance = xzDistance;
                     best = health;
                     rewoundPosition = pos;
+                    rewoundGrounded = history.GetGroundedAt(rewindTime);
                 }
             }
 

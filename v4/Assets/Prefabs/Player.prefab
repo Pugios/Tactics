@@ -135,6 +135,7 @@ GameObject:
   - component: {fileID: 9114870955445636514}
   - component: {fileID: 8162387438785765976}
   - component: {fileID: 3322128165816216}
+  - component: {fileID: 6531346233383104}
   - component: {fileID: 1562141369661307270}
   - component: {fileID: 6276122855982158245}
   - component: {fileID: 5686489343745237308}
@@ -146,8 +147,8 @@ GameObject:
   - component: {fileID: 301151471966402650}
   - component: {fileID: 6772032414193414345}
   - component: {fileID: 4365752961634913424}
-  - component: {fileID: 6531346233383104}
   - component: {fileID: 6531346233383105}
+  - component: {fileID: 8738903659734149788}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -279,6 +280,30 @@ MonoBehaviour:
   AutoObjectParentSync: 1
   SyncOwnerTransformWhenParented: 1
   AllowOwnerToParent: 0
+--- !u!114 &6531346233383104
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8415391576674575487}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9cccfffd52cd3a2a98d9dace965cb7a5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ShowTopMostFoldoutHeaderGroup: 1
+  runSpeed: 5.4
+  walkSpeedMultiplier: 0.5
+  crouchSpeedMultiplier: 0.3
+  gravity: -9.81
+  jumpHeight: 0.9
+  airWishSpeed: 2.5
+  airAcceleration: 10
+  maxAirSpeedSafetyCap: 20
+  positionTolerance: 0.05
+  interpolationDelayTicks: 3
+  interpolationSnapTicks: 15
 --- !u!114 &1562141369661307270
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -557,26 +582,6 @@ MonoBehaviour:
   defaultMelee: {fileID: 11400000, guid: b8bcabfb866ebe44da0dd4ecd9ecedf1, type: 2}
   defaultSidearm: {fileID: 11400000, guid: 7c04a2cb8a527a24a9be0c170a7e2993, type: 2}
   spikePickupPrefab: {fileID: 2450181037328219431, guid: 50544b0025250eb4ea823fd620bae8e3, type: 3}
---- !u!114 &6531346233383104
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8415391576674575487}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9cccfffd52cd3a2a98d9dace965cb7a5, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  ShowTopMostFoldoutHeaderGroup: 1
-  runSpeed: 5.4
-  walkSpeedMultiplier: 0.5
-  crouchSpeedMultiplier: 0.3
-  gravity: -9.81
-  positionTolerance: 0.05
-  interpolationDelayTicks: 3
-  interpolationSnapTicks: 15
 --- !u!114 &6531346233383105
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -587,5 +592,22 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 91c4e8b57a2f36d4bbf0a9c8d1e5f742, type: 3}
-  m_Name:
-  m_EditorClassIdentifier:
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ShowTopMostFoldoutHeaderGroup: 1
+--- !u!114 &8738903659734149788
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8415391576674575487}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 89b6b67146d022a40b32d52c4fd3bfe4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Tactics::Tactics.Vision.VisibleEntity
+  visualRoot: {fileID: 0}
+  feetTransform: {fileID: 0}
+  heightOverride: -1
+  radiusOverride: -1

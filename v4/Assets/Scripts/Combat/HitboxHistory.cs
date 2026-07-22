@@ -22,6 +22,7 @@ namespace Tactics.Combat
         {
             public float Time;
             public Vector3 Position;
+            public bool Grounded;
         }
 
         private readonly List<Sample> samples = new List<Sample>();
@@ -57,7 +58,7 @@ namespace Tactics.Combat
 
         private void Record()
         {
-            samples.Add(new Sample { Time = Time.time, Position = CurrentPosition });
+            samples.Add(new Sample { Time = Time.time, Position = CurrentPosition, Grounded = CurrentGrounded });
             if (samples.Count > Capacity) samples.RemoveAt(0);
         }
 
@@ -95,9 +96,32 @@ namespace Tactics.Combat
             return samples[0].Position;
         }
 
+        /// <summary>Whether the entity was airborne at the given server-local Time.time, clamped to the buffer.</summary>
+        public bool GetGroundedAt(float time)
+        {
+            if (samples.Count == 0) return CurrentGrounded;
+            if (time >= samples[samples.Count - 1].Time) return samples[samples.Count - 1].Grounded;
+            if (time <= samples[0].Time) return samples[0].Grounded;
+
+            // Booleans don't interpolate — pick whichever bracketing sample is closer in time.
+            for (int i = samples.Count - 1; i > 0; i--)
+            {
+                Sample older = samples[i - 1];
+                if (older.Time > time) continue;
+
+                Sample newer = samples[i];
+                return (time - older.Time) <= (newer.Time - time) ? older.Grounded : newer.Grounded;
+            }
+
+            return samples[0].Grounded;
+        }
+
         // The player's transform doubles as a smoothed view on the server, so the
         // sim's published snapshot position is the authoritative one; everything
         // else (dummies) is driven by its transform directly.
         private Vector3 CurrentPosition => movement != null ? movement.AuthoritativePosition : transform.position;
+
+        // Dummies have no PlayerMovementNetwork and never leave the ground.
+        private bool CurrentGrounded => movement == null || movement.AuthoritativeGrounded;
     }
 }

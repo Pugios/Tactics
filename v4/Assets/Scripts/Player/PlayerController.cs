@@ -13,15 +13,26 @@ namespace Tactics.Player
         private InputAction moveAction;
         private InputAction walkAction;
         private InputAction crouchAction;
+        private InputAction jumpAction;
         private InputAction centerCameraAction;
 
         private Vector2 moveInput;
         private bool isWalking;
         private bool isCrouching;
+        private bool jumpQueued;
 
         public Vector2 MoveInput => moveInput;
         public bool IsWalking => isWalking;
         public bool IsCrouching => isCrouching;
+
+        /// <summary>Consumes a queued jump press. Latched between Updates so a tap that
+        /// releases before the next network tick still gets seen.</summary>
+        public bool ConsumeJumpQueued()
+        {
+            bool value = jumpQueued;
+            jumpQueued = false;
+            return value;
+        }
 
         private void Awake()
         {
@@ -33,6 +44,7 @@ namespace Tactics.Player
             moveAction = InputSystem.actions.FindAction("Move");
             walkAction = InputSystem.actions.FindAction("Walk");
             crouchAction = InputSystem.actions.FindAction("Crouch");
+            jumpAction = InputSystem.actions.FindAction("Jump");
             centerCameraAction = InputSystem.actions.FindAction("CenterCamera");
         }
 
@@ -156,6 +168,7 @@ namespace Tactics.Player
             moveInput = moveAction.ReadValue<Vector2>();
             isWalking = walkAction.IsPressed();
             isCrouching = crouchAction.IsPressed();
+            if (jumpAction != null && jumpAction.WasPressedThisFrame()) jumpQueued = true;
         }
     }
 }

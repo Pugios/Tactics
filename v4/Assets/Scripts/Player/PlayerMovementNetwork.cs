@@ -10,6 +10,7 @@ namespace Tactics.Player
         public Vector2 Move;
         public bool Walk;
         public bool Crouch;
+        public bool Jump;
         public float YRotation;
     }
 
@@ -18,6 +19,7 @@ namespace Tactics.Player
         public int Tick;
         public Vector3 Position;
         public float YRotation;
+        public Vector3 HorizontalVelocity;
         public float VerticalVelocity;
         public bool Grounded;
         // Bumped on every server-side hard teleport (respawn). Consumers compare
@@ -52,6 +54,12 @@ namespace Tactics.Player
         [SerializeField] private float crouchSpeedMultiplier = 0.3f;
         [SerializeField] private float gravity = -9.81f;
 
+        [Header("Jump")]
+        [SerializeField] private float jumpHeight = 0.9f; // apex height in meters, launch speed derived from gravity
+        [SerializeField] private float airWishSpeed = 2.5f; // per-tick speed a single input can add toward its direction
+        [SerializeField] private float airAcceleration = 10f; // how fast that addition approaches airWishSpeed
+        [SerializeField] private float maxAirSpeedSafetyCap = 20f; // safety net only, not a gameplay cap (see PlayerMovementSimulation)
+
         [Header("Reconciliation")]
         [SerializeField] private float positionTolerance = 0.05f;
 
@@ -72,6 +80,9 @@ namespace Tactics.Player
         /// </summary>
         public Vector3 AuthoritativePosition => IsSpawned ? authoritativeState.Value.Position : transform.position;
 
+        /// <summary>Whether the server's authoritative copy of this player is airborne right now.</summary>
+        public bool AuthoritativeGrounded => IsSpawned ? authoritativeState.Value.Grounded : true;
+
         /// <summary>How many ticks in the past remote views are rendered (lag-comp rewind input).</summary>
         public float InterpolationDelayTicks => interpolationDelayTicks;
 
@@ -80,6 +91,7 @@ namespace Tactics.Player
             public int Tick;
             public PlayerInputTick Input;
             public Vector3 ResultPosition;
+            public Vector3 ResultHorizontalVelocity;
             public float ResultVerticalVelocity;
             public bool ResultGrounded;
         }
@@ -128,6 +140,7 @@ namespace Tactics.Player
         // Simulation state that must survive rewind: carried in every snapshot and
         // buffer entry. CharacterController.isGrounded reflects the last Move and is
         // corrupted by the enable-toggle teleports, so groundedness is tracked here.
+        private Vector3 horizontalVelocity;
         private float verticalVelocity;
         private bool simGrounded;
 
@@ -276,6 +289,7 @@ namespace Tactics.Player
                     Tick = frozenInput.Tick,
                     Input = frozenInput,
                     ResultPosition = transform.position,
+                    ResultHorizontalVelocity = horizontalVelocity,
                     ResultVerticalVelocity = verticalVelocity,
                     ResultGrounded = simGrounded
                 });
@@ -289,6 +303,7 @@ namespace Tactics.Player
                         Tick = frozenInput.Tick,
                         Position = transform.position,
                         YRotation = frozenInput.YRotation,
+                        HorizontalVelocity = horizontalVelocity,
                         VerticalVelocity = verticalVelocity,
                         Grounded = simGrounded,
                         TeleportCount = serverTeleportCount
@@ -302,6 +317,7 @@ namespace Tactics.Player
                 Move = playerController.MoveInput,
                 Walk = playerController.IsWalking,
                 Crouch = playerController.IsCrouching,
+                Jump = playerController.ConsumeJumpQueued(),
                 YRotation = transform.eulerAngles.y
             };
             hasFrozenInput = true;
@@ -361,6 +377,7 @@ namespace Tactics.Player
                 Tick = input.Tick,
                 Position = transform.position,
                 YRotation = input.YRotation,
+                HorizontalVelocity = horizontalVelocity,
                 VerticalVelocity = verticalVelocity,
                 Grounded = simGrounded,
                 TeleportCount = serverTeleportCount
@@ -382,6 +399,7 @@ namespace Tactics.Player
             transform.position = position;
             characterController.enabled = true;
             serverSimPosition = position;
+            horizontalVelocity = Vector3.zero;
             verticalVelocity = 0f;
             simGrounded = false;
             serverTeleportCount++;
@@ -392,6 +410,7 @@ namespace Tactics.Player
                 Tick = previous.Tick,
                 Position = position,
                 YRotation = previous.YRotation,
+                HorizontalVelocity = Vector3.zero,
                 VerticalVelocity = 0f,
                 Grounded = false,
                 TeleportCount = serverTeleportCount
@@ -440,26 +459,67 @@ namespace Tactics.Player
         private void Simulate(PlayerInputTick input, float dt, bool emitSound)
         {
             Quaternion rotation = Quaternion.Euler(0f, input.YRotation, 0f);
-            Vector3 horizontal = PlayerMovementSimulation.ComputeHorizontalMove(
+            Vector3 desired = PlayerMovementSimulation.ComputeHorizontalMove(
                 input.Move, rotation, input.Walk, input.Crouch, runSpeed, walkSpeedMultiplier, crouchSpeedMultiplier);
 
-            if (simGrounded)
+            bool justJumped = false;
+
+            if (simGrounded && !input.Jump)
             {
+                // Normal grounded movement: instant control, unchanged from before jumping
+                // existed. Landing here without immediately re-jumping is also where a bhop
+                // chain breaks — momentum resets to plain run speed.
+                horizontalVelocity = desired;
                 verticalVelocity = -0.5f; // Keep grounded
 
-                if (emitSound && soundEmitter != null && horizontal.sqrMagnitude > 0.01f && !input.Walk && !input.Crouch)
+                if (emitSound && soundEmitter != null && horizontalVelocity.sqrMagnitude > 0.01f && !input.Walk && !input.Crouch)
                 {
                     soundEmitter.EmitMoveSound(true);
                 }
             }
             else
             {
-                verticalVelocity += gravity * dt;
+                if (simGrounded && input.Jump)
+                {
+                    // Jump launch — fresh or chained. horizontalVelocity is left untouched:
+                    // on a fresh jump it already holds last tick's grounded speed (the
+                    // momentum carried into the jump); on a same-tick landing+rejump (a
+                    // successful bhop) it still holds the air speed from before landing,
+                    // uneroded — this is what makes chaining possible.
+                    verticalVelocity = Mathf.Sqrt(-2f * gravity * jumpHeight);
+                    simGrounded = false;
+                    justJumped = true;
+                }
+                else
+                {
+                    verticalVelocity += gravity * dt;
+                }
+
+                // Air-accelerate (Quake/Source bhop formula): input only adds speed toward
+                // wishDir up to airWishSpeed relative to velocity's current component along
+                // wishDir, not toward a fixed cap on total magnitude — so speed can compound
+                // across chained, well-steered jumps instead of being capped per jump.
+                if (desired.sqrMagnitude > 0.0001f)
+                {
+                    Vector3 wishDir = desired.normalized;
+                    float currentSpeedAlongWish = Vector3.Dot(horizontalVelocity, wishDir);
+                    float addSpeed = airWishSpeed - currentSpeedAlongWish;
+                    if (addSpeed > 0f)
+                    {
+                        float accelSpeed = Mathf.Min(airAcceleration * airWishSpeed * dt, addSpeed);
+                        horizontalVelocity += wishDir * accelSpeed;
+                    }
+                }
+
+                // Safety net only, not a design cap — guards against runaway float growth.
+                if (horizontalVelocity.magnitude > maxAirSpeedSafetyCap)
+                    horizontalVelocity = horizontalVelocity.normalized * maxAirSpeedSafetyCap;
             }
 
-            Vector3 finalMove = horizontal + Vector3.up * verticalVelocity;
+            Vector3 finalMove = horizontalVelocity + Vector3.up * verticalVelocity;
             characterController.Move(finalMove * dt);
-            simGrounded = (characterController.collisionFlags & CollisionFlags.Below) != 0;
+            if (!justJumped)
+                simGrounded = (characterController.collisionFlags & CollisionFlags.Below) != 0;
         }
 
         private void OnAuthoritativeStateChanged(PlayerStateSnapshot previous, PlayerStateSnapshot current)
@@ -487,6 +547,7 @@ namespace Tactics.Player
                 characterController.enabled = false;
                 transform.position = current.Position;
                 characterController.enabled = true;
+                horizontalVelocity = current.HorizontalVelocity;
                 verticalVelocity = current.VerticalVelocity;
                 simGrounded = current.Grounded;
                 pendingTicks.Clear();
@@ -506,6 +567,7 @@ namespace Tactics.Player
                 characterController.enabled = false;
                 transform.position = current.Position;
                 characterController.enabled = true;
+                horizontalVelocity = current.HorizontalVelocity;
                 verticalVelocity = current.VerticalVelocity;
                 simGrounded = current.Grounded;
 
@@ -515,6 +577,7 @@ namespace Tactics.Player
                     PredictedTick replay = pendingTicks[i];
                     Simulate(replay.Input, dt, emitSound: false);
                     replay.ResultPosition = transform.position;
+                    replay.ResultHorizontalVelocity = horizontalVelocity;
                     replay.ResultVerticalVelocity = verticalVelocity;
                     replay.ResultGrounded = simGrounded;
                     pendingTicks[i] = replay;
