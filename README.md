@@ -10,9 +10,4 @@ This Version of Tactics uses Unities Netcode for GameObjects which allows me to 
 Initial Versions will be using one of the Players Computers as Host while other connect to it as Clients.
 Future plans are to create a dedicated Host for other players to connect to. 
 
-<iframe
-  src="https://mozilla.github.io/pdf.js/web/viewer.html?file=https://github.com/Pugios/Tactics/blob/v4/tactics_pitch.pdf"
-  width="100%"
-  height="600px"
-  style="border: none;">
-</iframe>
+View the [Tactics Pitch](./tactics_pitch.pdf) for a quick preview of how the Game will function!
