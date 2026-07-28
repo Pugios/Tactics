@@ -131,8 +131,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2790479251755432146}
-  - component: {fileID: 8564996509012003594}
-  - component: {fileID: 9114870955445636514}
   - component: {fileID: 8162387438785765976}
   - component: {fileID: 3322128165816216}
   - component: {fileID: 6531346233383104}
@@ -149,6 +147,7 @@ GameObject:
   - component: {fileID: 4365752961634913424}
   - component: {fileID: 6531346233383105}
   - component: {fileID: 8738903659734149788}
+  - component: {fileID: 22463577205608760}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -170,6 +169,7 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 2664838724357787632}
+  - {fileID: 7499921927327292}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: -90, z: 0}
 --- !u!33 &8564996509012003594
@@ -178,7 +178,7 @@ MeshFilter:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8415391576674575487}
+  m_GameObject: {fileID: 19046548608138198}
   m_Mesh: {fileID: 10208, guid: 0000000000000000e000000000000000, type: 0}
 --- !u!23 &9114870955445636514
 MeshRenderer:
@@ -186,7 +186,7 @@ MeshRenderer:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8415391576674575487}
+  m_GameObject: {fileID: 19046548608138198}
   m_Enabled: 1
   m_CastShadows: 1
   m_ReceiveShadows: 1
@@ -611,3 +611,53 @@ MonoBehaviour:
   feetTransform: {fileID: 0}
   heightOverride: -1
   radiusOverride: -1
+--- !u!1 &19046548608138198
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7499921927327292}
+  - component: {fileID: 8564996509012003594}
+  - component: {fileID: 9114870955445636514}
+  m_Layer: 0
+  m_Name: Visual
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7499921927327292
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 19046548608138198}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2790479251755432146}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &22463577205608760
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8415391576674575487}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d52c37f2695d095afb78f037f85f281f, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Tactics::Tactics.Player.PlayerCrouchVisuals
+  visualRoot: {fileID: 7499921927327292}
+  visibleEntity: {fileID: 8738903659734149788}
+  standingVisualScaleY: 1
+  crouchVisualScaleY: 0.6
+  crouchVisibilityHeight: 1.2

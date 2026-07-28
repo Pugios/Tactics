@@ -37,6 +37,7 @@ namespace Tactics.Player
         private void Awake()
         {
             mainCamera = UnityEngine.Camera.main;
+            if (visionOrigin != null) visionOriginStandingLocalY = visionOrigin.localPosition.y;
         }
 
         private void Start()
@@ -60,6 +61,11 @@ namespace Tactics.Player
                 ? UnityEngine.Camera.main.GetComponent<Tactics.Camera.TopDownCamera>()
                 : null;
             if (tdCam != null) tdCam.SetTarget(transform);
+
+            // You must always see yourself — a bad LOS ray to your own capsule
+            // (e.g. crouched near a corner) shouldn't cull your own renderer.
+            var visibleEntity = GetComponent<VisibleEntity>();
+            if (visibleEntity != null) visibleEntity.SetAlwaysVisible(true);
         }
 
         private void Update()
@@ -112,9 +118,12 @@ namespace Tactics.Player
         [Header("Vision")]
         [SerializeField] private Transform visionOrigin;
         [SerializeField] private float eyeHeight = 1.5f;
+        [SerializeField] private float crouchEyeHeight = 1f;
 
         public Transform VisionOrigin => visionOrigin;
-        
+
+        private float visionOriginStandingLocalY;
+
         private Vector3 lookTarget;
         private Vector3 aimGroundPoint;
 
@@ -127,7 +136,16 @@ namespace Tactics.Player
             if (!TryGetMouseGroundPoint(ray, out Vector3 groundPoint))
                 return;
 
-            lookTarget = groundPoint + Vector3.up * eyeHeight;
+            float currentEyeHeight = isCrouching ? crouchEyeHeight : eyeHeight;
+
+            if (visionOrigin != null)
+            {
+                Vector3 localPos = visionOrigin.localPosition;
+                localPos.y = visionOriginStandingLocalY - (eyeHeight - currentEyeHeight);
+                visionOrigin.localPosition = localPos;
+            }
+
+            lookTarget = groundPoint + Vector3.up * currentEyeHeight;
             aimGroundPoint = groundPoint;
 
             Vector3 direction = groundPoint - transform.position;

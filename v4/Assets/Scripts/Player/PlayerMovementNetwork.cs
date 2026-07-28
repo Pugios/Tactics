@@ -22,6 +22,7 @@ namespace Tactics.Player
         public Vector3 HorizontalVelocity;
         public float VerticalVelocity;
         public bool Grounded;
+        public bool IsCrouching;
         // Bumped on every server-side hard teleport (respawn). Consumers compare
         // against the last count they saw and snap instead of smoothing/reconciling,
         // since a teleport is not a misprediction.
@@ -85,6 +86,15 @@ namespace Tactics.Player
 
         /// <summary>How many ticks in the past remote views are rendered (lag-comp rewind input).</summary>
         public float InterpolationDelayTicks => interpolationDelayTicks;
+
+        /// <summary>
+        /// Effective crouch state for presentation (visual pose, visibility capsule).
+        /// Owner reads its own zero-latency input; everyone else reads the last
+        /// replicated snapshot.
+        /// </summary>
+        public bool CurrentIsCrouching => !IsSpawned ? false
+            : IsOwner ? playerController.IsCrouching
+            : authoritativeState.Value.IsCrouching;
 
         private struct PredictedTick
         {
@@ -306,6 +316,7 @@ namespace Tactics.Player
                         HorizontalVelocity = horizontalVelocity,
                         VerticalVelocity = verticalVelocity,
                         Grounded = simGrounded,
+                        IsCrouching = frozenInput.Crouch,
                         TeleportCount = serverTeleportCount
                     };
                 }
@@ -380,6 +391,7 @@ namespace Tactics.Player
                 HorizontalVelocity = horizontalVelocity,
                 VerticalVelocity = verticalVelocity,
                 Grounded = simGrounded,
+                IsCrouching = input.Crouch,
                 TeleportCount = serverTeleportCount
             };
         }
@@ -413,6 +425,7 @@ namespace Tactics.Player
                 HorizontalVelocity = Vector3.zero,
                 VerticalVelocity = 0f,
                 Grounded = false,
+                IsCrouching = false,
                 TeleportCount = serverTeleportCount
             };
 

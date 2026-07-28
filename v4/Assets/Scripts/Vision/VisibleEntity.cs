@@ -13,6 +13,7 @@ namespace Tactics.Vision
         [SerializeField] private Transform feetTransform;
         [SerializeField] private float heightOverride = -1f;
         [SerializeField] private float radiusOverride = -1f;
+        [SerializeField] private bool alwaysVisible = false;
 
         private bool isVisible;
         private Renderer[] renderers;
@@ -20,6 +21,16 @@ namespace Tactics.Vision
         public Vector3 FeetPosition => feetTransform != null ? feetTransform.position : transform.position;
         public float HeightOverride => heightOverride;
         public float RadiusOverride => radiusOverride;
+
+        /// <summary>
+        /// Bypasses the vision query entirely — always rendered. Used for the
+        /// local player's own entity (you must always see yourself) and, later,
+        /// teammates once a team system exists.
+        /// </summary>
+        public bool AlwaysVisible => alwaysVisible;
+
+        public void SetHeightOverride(float value) => heightOverride = value;
+        public void SetAlwaysVisible(bool value) => alwaysVisible = value;
 
         private void OnEnable()
         {

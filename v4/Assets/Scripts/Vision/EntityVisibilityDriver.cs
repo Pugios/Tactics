@@ -39,6 +39,12 @@ namespace Tactics.Vision
                 if (entity == null)
                     continue;
 
+                if (entity.AlwaysVisible)
+                {
+                    entity.SetVisible(true);
+                    continue;
+                }
+
                 bool visible = visionController.IsEnemyVisibleAt(
                     entity.FeetPosition,
                     entity.HeightOverride,
@@ -52,8 +58,11 @@ namespace Tactics.Vision
         {
             for (int i = 0; i < entities.Count; i++)
             {
-                if (entities[i] != null)
-                    entities[i].SetVisible(false);
+                VisibleEntity entity = entities[i];
+                if (entity == null)
+                    continue;
+
+                entity.SetVisible(entity.AlwaysVisible);
             }
         }
     }

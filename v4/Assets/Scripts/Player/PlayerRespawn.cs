@@ -7,9 +7,16 @@ namespace Tactics.Player
     {
         [Header("Respawn Settings")]
         [SerializeField] private float outOfBoundsY = -10f;
+        [Tooltip("Used only when the scene has no PlayerSpawnPoint markers.")]
         [SerializeField] private Vector3 defaultSpawnPosition = new Vector3(-20f, 17f, 8f);
 
-        public Vector3 DefaultSpawnPosition => defaultSpawnPosition;
+        // Round-robins every player across the scene's combined spawn point pool
+        // so a full 10-player lobby spreads out and a 2-player lobby doesn't stack
+        // both players on the same point.
+        private static int nextSpawnIndex;
+        private int assignedSpawnIndex = -1;
+
+        public Vector3 DefaultSpawnPosition => ResolveSpawnPosition();
 
         private CharacterController characterController;
         private Vector3 lastGroundedPosition;
@@ -22,7 +29,7 @@ namespace Tactics.Player
 
         private void Start()
         {
-            RespawnTo(defaultSpawnPosition);
+            RespawnTo(DefaultSpawnPosition);
         }
 
         public override void OnNetworkSpawn()
@@ -58,9 +65,13 @@ namespace Tactics.Player
             Debug.Log($"[PlayerRespawn] Player respawned to {position}");
         }
 
-        public void SetDefaultSpawn(Vector3 position)
+        private Vector3 ResolveSpawnPosition()
         {
-            defaultSpawnPosition = position;
+            var points = PlayerSpawnPoint.All;
+            if (points.Count == 0) return defaultSpawnPosition;
+
+            if (assignedSpawnIndex < 0) assignedSpawnIndex = nextSpawnIndex++;
+            return points[assignedSpawnIndex % points.Count].transform.position;
         }
     }
 }
