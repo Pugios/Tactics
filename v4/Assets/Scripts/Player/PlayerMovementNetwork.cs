@@ -44,11 +44,27 @@ namespace Tactics.Player
     /// IMPORTANT: all movement must go through <see cref="Simulate"/>. Any position
     /// change applied outside it (dashes, knockback, ...) will be treated as a
     /// misprediction and reverted by reconciliation.
+    ///
+    /// This file is organized by WHO runs each block, not just top-to-bottom by
+    /// feature, since owner/server/everyone-else code is interleaved by necessity
+    /// (a NetworkBehaviour is one class instantiated on every peer):
+    ///   1. Inspector settings / public API / state fields (grouped by role below).
+    ///   2. Unity lifecycle (Awake/OnNetworkSpawn/OnNetworkDespawn/Update) — dispatches
+    ///      into the region-specific code below based on IsOwner/IsServer.
+    ///   3. OWNER: INPUT CAPTURE & PREDICTION — only runs on the owning client.
+    ///   4. SERVER: AUTHORITATIVE SIMULATION — only runs on the server.
+    ///   5. SHARED PHYSICS STEP — the one method both of the above call into, so
+    ///      client and server can never simulate differently.
+    ///   6. REMOTE VIEW: INTERPOLATION — runs on every instance that is NOT
+    ///      simulating this player locally (i.e. everyone except the owner).
+    ///   7. OWNER: RECONCILIATION — only runs on the owning client.
     /// </summary>
     [RequireComponent(typeof(CharacterController))]
     [RequireComponent(typeof(PlayerController))]
     public class PlayerMovementNetwork : NetworkBehaviour
     {
+        #region Inspector Settings
+
         [Header("Movement Settings")]
         [SerializeField] private float runSpeed = 5.4f; // Typical Valorant speed
         [SerializeField] private float walkSpeedMultiplier = 0.5f;
@@ -71,6 +87,10 @@ namespace Tactics.Player
         private const int MaxBufferedTicks = 128; // ~4s @ 30Hz safety cap if acks stop arriving
         private const int ServerInputBacklogThreshold = 2; // above this, burn 2 inputs per tick to catch up
         private const int MaxViewSnapshots = 64;
+
+        #endregion
+
+        #region Public API
 
         /// <summary>
         /// The server's true position for this player — the last published
@@ -96,6 +116,22 @@ namespace Tactics.Player
             : IsOwner ? playerController.IsCrouching
             : authoritativeState.Value.IsCrouching;
 
+        #endregion
+
+        #region Component Refs & Networked State
+
+        private CharacterController characterController;
+        private PlayerController playerController;
+        private PlayerRespawn playerRespawn;
+        private Tactics.Sound.SoundEmitter soundEmitter;
+        private Tactics.Combat.Health health;
+
+        private readonly NetworkVariable<PlayerStateSnapshot> authoritativeState = new NetworkVariable<PlayerStateSnapshot>();
+
+        #endregion
+
+        #region Owner: Prediction State
+
         private struct PredictedTick
         {
             public int Tick;
@@ -106,14 +142,6 @@ namespace Tactics.Player
             public bool ResultGrounded;
         }
 
-        private CharacterController characterController;
-        private PlayerController playerController;
-        private PlayerRespawn playerRespawn;
-        private Tactics.Sound.SoundEmitter soundEmitter;
-
-        private readonly NetworkVariable<PlayerStateSnapshot> authoritativeState = new NetworkVariable<PlayerStateSnapshot>();
-
-        // Owner prediction
         private readonly List<PredictedTick> pendingTicks = new List<PredictedTick>();
         private PlayerInputTick frozenInput;
         private bool hasFrozenInput;
@@ -121,21 +149,26 @@ namespace Tactics.Player
         private PlayerInputTick prevInput1 = new PlayerInputTick { Tick = -1 };
         private PlayerInputTick prevInput2 = new PlayerInputTick { Tick = -1 };
 
-        // Server simulation
+        // Last teleport count the owner's reconciliation has processed.
+        private int ownerTeleportCount;
+
+        #endregion
+
+        #region Server: Simulation State
+
         private readonly Queue<PlayerInputTick> serverInputQueue = new Queue<PlayerInputTick>();
         private bool serverInputStreamStarted;
         private int newestReceivedInputTick = -1;
         private Vector3 serverSimPosition;
         private int serverTeleportCount;
-        private Tactics.Combat.Health health;
 
-        // Last teleport count each consumer has processed.
-        private int ownerTeleportCount;
-        private int viewTeleportCount;
+        #endregion
 
-        // Remote view interpolation: non-owner instances render this player a fixed
-        // few ticks in the past, playing back between buffered snapshots, so packet
-        // gaps are bridged smoothly instead of causing the view to freeze then leap.
+        #region Remote View: Interpolation State
+
+        // Non-owner instances render this player a fixed few ticks in the past,
+        // playing back between buffered snapshots, so packet gaps are bridged
+        // smoothly instead of causing the view to freeze then leap.
         private struct ViewSnapshot
         {
             public int Tick;
@@ -147,12 +180,23 @@ namespace Tactics.Player
         private double viewTick; // playhead on the snapshot-tick timeline
         private bool viewInitialized;
 
+        // Last teleport count the remote-view playback has processed.
+        private int viewTeleportCount;
+
+        #endregion
+
+        #region Shared Physics State
+
         // Simulation state that must survive rewind: carried in every snapshot and
         // buffer entry. CharacterController.isGrounded reflects the last Move and is
         // corrupted by the enable-toggle teleports, so groundedness is tracked here.
         private Vector3 horizontalVelocity;
         private float verticalVelocity;
         private bool simGrounded;
+
+        #endregion
+
+        #region Unity Lifecycle
 
         private void Awake()
         {
@@ -230,57 +274,10 @@ namespace Tactics.Player
             UpdateRemoteView();
         }
 
-        private void UpdateRemoteView()
-        {
-            if (viewBuffer.Count == 0) return;
+        #endregion
 
-            ViewSnapshot newest = viewBuffer[viewBuffer.Count - 1];
-            double targetTick = newest.Tick - interpolationDelayTicks;
-
-            if (!viewInitialized || System.Math.Abs(targetTick - viewTick) > interpolationSnapTicks)
-            {
-                viewTick = targetTick;
-                viewInitialized = true;
-            }
-            else
-            {
-                // Play forward at tick rate, gently speeding up/slowing down to track
-                // the target delay so brief gaps fast-forward instead of teleporting.
-                double drift = targetTick - viewTick;
-                double speed = System.Math.Max(0.5, System.Math.Min(2.0, 1.0 + drift * 0.1));
-                viewTick += speed * Time.deltaTime / NetworkManager.LocalTime.FixedDeltaTime;
-            }
-            if (viewTick > newest.Tick) viewTick = newest.Tick;
-
-            // Drop snapshots the playhead has fully passed.
-            while (viewBuffer.Count >= 2 && viewBuffer[1].Tick <= viewTick) viewBuffer.RemoveAt(0);
-
-            ViewSnapshot from = viewBuffer[0];
-            Vector3 position = from.Position;
-            float yRotation = from.YRotation;
-            if (viewBuffer.Count >= 2 && viewTick > from.Tick)
-            {
-                ViewSnapshot to = viewBuffer[1];
-                float t = (float)((viewTick - from.Tick) / (to.Tick - from.Tick));
-                position = Vector3.Lerp(from.Position, to.Position, t);
-                yRotation = Mathf.LerpAngle(from.YRotation, to.YRotation, t);
-            }
-
-            transform.position = position;
-            transform.rotation = Quaternion.Euler(0f, yRotation, 0f);
-        }
-
-        private void AppendViewSnapshot(PlayerStateSnapshot snapshot)
-        {
-            if (viewBuffer.Count > 0 && snapshot.Tick <= viewBuffer[viewBuffer.Count - 1].Tick) return;
-            viewBuffer.Add(new ViewSnapshot
-            {
-                Tick = snapshot.Tick,
-                Position = snapshot.Position,
-                YRotation = snapshot.YRotation
-            });
-            while (viewBuffer.Count > MaxViewSnapshots) viewBuffer.RemoveAt(0);
-        }
+        #region Owner: Input Capture & Prediction
+        // Everything in this region runs ONLY on the owning client.
 
         private void OnOwnerTick()
         {
@@ -342,6 +339,33 @@ namespace Tactics.Player
             }
             prevInput2 = prevInput1;
             prevInput1 = frozenInput;
+        }
+
+        #endregion
+
+        #region Server: Authoritative Simulation
+        // Everything in this region runs ONLY on the server. SubmitInputServerRpc is
+        // *called* from the owner's OnOwnerTick above, but Rpc(SendTo.Server) means
+        // its body executes on the server — it's the entry point where a client's
+        // input arrives, not owner-side code.
+
+        [Rpc(SendTo.Server, Delivery = RpcDelivery.Unreliable, InvokePermission = RpcInvokePermission.Owner)]
+        private void SubmitInputServerRpc(PlayerInputTick current, PlayerInputTick previous1, PlayerInputTick previous2)
+        {
+            // Oldest first so redundant re-sends fill gaps in order.
+            TryEnqueueInput(previous2);
+            TryEnqueueInput(previous1);
+            TryEnqueueInput(current);
+        }
+
+        private void TryEnqueueInput(PlayerInputTick input)
+        {
+            // Unreliable delivery is also unordered: never queue an input at or
+            // behind one already accepted (also skips the Tick = -1 placeholders
+            // sent during the first two ticks).
+            if (input.Tick <= newestReceivedInputTick) return;
+            newestReceivedInputTick = input.Tick;
+            serverInputQueue.Enqueue(input);
         }
 
         private void OnServerTick()
@@ -450,24 +474,13 @@ namespace Tactics.Player
             if (health != null) health.ServerRevive();
         }
 
-        [Rpc(SendTo.Server, Delivery = RpcDelivery.Unreliable, InvokePermission = RpcInvokePermission.Owner)]
-        private void SubmitInputServerRpc(PlayerInputTick current, PlayerInputTick previous1, PlayerInputTick previous2)
-        {
-            // Oldest first so redundant re-sends fill gaps in order.
-            TryEnqueueInput(previous2);
-            TryEnqueueInput(previous1);
-            TryEnqueueInput(current);
-        }
+        #endregion
 
-        private void TryEnqueueInput(PlayerInputTick input)
-        {
-            // Unreliable delivery is also unordered: never queue an input at or
-            // behind one already accepted (also skips the Tick = -1 placeholders
-            // sent during the first two ticks).
-            if (input.Tick <= newestReceivedInputTick) return;
-            newestReceivedInputTick = input.Tick;
-            serverInputQueue.Enqueue(input);
-        }
+        #region Shared Physics Step
+        // Called from all three simulation paths above — owner prediction
+        // (OnOwnerTick / Update), host-direct-authority, and server replay
+        // (SimulateServerStep) — so client and server can never simulate
+        // differently: there is exactly one movement formula.
 
         private void Simulate(PlayerInputTick input, float dt, bool emitSound)
         {
@@ -535,6 +548,72 @@ namespace Tactics.Player
                 simGrounded = (characterController.collisionFlags & CollisionFlags.Below) != 0;
         }
 
+        #endregion
+
+        #region Remote View: Interpolation
+        // Runs on every instance that is NOT simulating this player locally — i.e.
+        // everyone except the owner (including the server's own view of players it
+        // doesn't own, and every spectator/other client).
+
+        private void UpdateRemoteView()
+        {
+            if (viewBuffer.Count == 0) return;
+
+            ViewSnapshot newest = viewBuffer[viewBuffer.Count - 1];
+            double targetTick = newest.Tick - interpolationDelayTicks;
+
+            if (!viewInitialized || System.Math.Abs(targetTick - viewTick) > interpolationSnapTicks)
+            {
+                viewTick = targetTick;
+                viewInitialized = true;
+            }
+            else
+            {
+                // Play forward at tick rate, gently speeding up/slowing down to track
+                // the target delay so brief gaps fast-forward instead of teleporting.
+                double drift = targetTick - viewTick;
+                double speed = System.Math.Max(0.5, System.Math.Min(2.0, 1.0 + drift * 0.1));
+                viewTick += speed * Time.deltaTime / NetworkManager.LocalTime.FixedDeltaTime;
+            }
+            if (viewTick > newest.Tick) viewTick = newest.Tick;
+
+            // Drop snapshots the playhead has fully passed.
+            while (viewBuffer.Count >= 2 && viewBuffer[1].Tick <= viewTick) viewBuffer.RemoveAt(0);
+
+            ViewSnapshot from = viewBuffer[0];
+            Vector3 position = from.Position;
+            float yRotation = from.YRotation;
+            if (viewBuffer.Count >= 2 && viewTick > from.Tick)
+            {
+                ViewSnapshot to = viewBuffer[1];
+                float t = (float)((viewTick - from.Tick) / (to.Tick - from.Tick));
+                position = Vector3.Lerp(from.Position, to.Position, t);
+                yRotation = Mathf.LerpAngle(from.YRotation, to.YRotation, t);
+            }
+
+            transform.position = position;
+            transform.rotation = Quaternion.Euler(0f, yRotation, 0f);
+        }
+
+        private void AppendViewSnapshot(PlayerStateSnapshot snapshot)
+        {
+            if (viewBuffer.Count > 0 && snapshot.Tick <= viewBuffer[viewBuffer.Count - 1].Tick) return;
+            viewBuffer.Add(new ViewSnapshot
+            {
+                Tick = snapshot.Tick,
+                Position = snapshot.Position,
+                YRotation = snapshot.YRotation
+            });
+            while (viewBuffer.Count > MaxViewSnapshots) viewBuffer.RemoveAt(0);
+        }
+
+        #endregion
+
+        #region Owner: Reconciliation
+        // Runs only on the owning client (the host early-returns since it already
+        // IS the authority for its own player, and non-owner instances take the
+        // remote-view branch instead — see the top of the method).
+
         private void OnAuthoritativeStateChanged(PlayerStateSnapshot previous, PlayerStateSnapshot current)
         {
             if (!IsOwner)
@@ -599,6 +678,8 @@ namespace Tactics.Player
 
             pendingTicks.RemoveRange(0, index + 1);
         }
+
+        #endregion
     }
 
     internal static class PlayerMovementSimulation
