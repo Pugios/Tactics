@@ -47,6 +47,9 @@ namespace Tactics.Vision
         [SerializeField] private bool debugShowEyeDepth;
         [Tooltip("Draws the eye camera's normal color view in the corner of the game view")]
         [SerializeField] private bool debugShowEyeView;
+        [Tooltip("Draws every capsule sample point checked against each VisibleEntity, green if that point passes the cone+LOS test, red if it doesn't.")]
+        [SerializeField] private bool debugShowVisibilitySamplePoints;
+        [SerializeField] private float debugSamplePointRadius = 0.05f;
 
         /// <summary>Body sample points as fractions of enemy height: head, chest, knees, feet.</summary>
         private static readonly Vector4 SampleHeightFractions = new Vector4(0.95f, 0.55f, 0.25f, 0.075f);
@@ -484,6 +487,70 @@ namespace Tactics.Vision
             Gizmos.color = Color.cyan;
             Gizmos.DrawWireSphere(origin.position, 0.15f);
             Gizmos.DrawRay(origin.position, origin.forward * 3f);
+        }
+
+        private readonly List<Vector3> debugSampleBuffer = new List<Vector3>(16);
+
+        // Unity calls OnDrawGizmos on every instance regardless of the component's
+        // enabled state, but only the owner's aimValid ever gets set (RefreshAimState
+        // runs in LateUpdate, which non-owner instances never tick since they disable
+        // themselves in OnNetworkSpawn) — so this naturally only draws for the local player.
+        private void OnDrawGizmos()
+        {
+            if (!debugShowVisibilitySamplePoints || !Application.isPlaying || !aimValid)
+                return;
+
+            VisionConfig config = Config;
+            IReadOnlyList<VisibleEntity> entities = VisibleEntity.All;
+
+            for (int i = 0; i < entities.Count; i++)
+            {
+                VisibleEntity entity = entities[i];
+                if (entity == null || entity.AlwaysVisible)
+                    continue;
+
+                float height = entity.HeightOverride > 0f ? entity.HeightOverride : config.EnemyHeight;
+                float radius = entity.RadiusOverride > 0f ? entity.RadiusOverride : config.EnemyRadius;
+
+                // Must match IsEnemyVisibleAt's basis exactly (position-only, not aimTarget)
+                // or this visualization would lie about what the real query does.
+                Vector3 capsuleCenter = entity.FeetPosition + Vector3.up * (height * 0.5f);
+                Vector3 toTarget = capsuleCenter - aimOrigin;
+                VisionEvaluator.CollectCapsuleSamplePoints(entity.FeetPosition, radius, height, toTarget, debugSampleBuffer);
+
+                for (int p = 0; p < debugSampleBuffer.Count; p++)
+                {
+                    Vector3 point = debugSampleBuffer[p];
+                    bool inCone = VisionEvaluator.IsInCone(aimOrigin, aimTarget, point, config.HorizontalViewAngle * 0.5f);
+                    bool visible = inCone && VisionEvaluator.HasLineOfSight(aimOrigin, point, config.LosMask, config.LosSkinWidth);
+
+                    if (visible)
+                    {
+                        Gizmos.color = Color.green;
+                        Gizmos.DrawSphere(point, debugSamplePointRadius);
+                        Gizmos.DrawLine(aimOrigin, point);
+                        continue;
+                    }
+
+                    Gizmos.color = !inCone ? new Color(1f, 0.5f, 0f) : Color.red;
+                    Gizmos.DrawSphere(point, debugSamplePointRadius);
+
+                    // Blocked-by-geometry (not out-of-cone) points get a line to the
+                    // actual hit, so you can see exactly which collider is in the way.
+                    if (inCone)
+                    {
+                        Vector3 delta = point - aimOrigin;
+                        float distance = delta.magnitude;
+                        if (distance > config.LosSkinWidth &&
+                            Physics.Raycast(aimOrigin, delta / distance, out RaycastHit hit, distance - config.LosSkinWidth, config.LosMask, QueryTriggerInteraction.Ignore))
+                        {
+                            Gizmos.color = Color.yellow;
+                            Gizmos.DrawLine(aimOrigin, hit.point);
+                            Gizmos.DrawSphere(hit.point, debugSamplePointRadius * 1.5f);
+                        }
+                    }
+                }
+            }
         }
     }
 }

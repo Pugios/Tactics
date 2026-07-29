@@ -49,7 +49,14 @@ namespace Tactics.Vision
             if (!IsEnemyRoughlyInCone(origin, forward, feetPosition, height, radius, config))
                 return false;
 
-            CollectCapsuleSamplePoints(feetPosition, radius, height, forward, CapsuleSampleBuffer);
+            // The ring basis must depend only on relative position (origin -> capsule),
+            // never on the observer's raw aim direction — otherwise rotating the camera
+            // in place spins the sample points around the capsule and flips visibility
+            // with no change in actual geometry. The cone/FOV test above is the one
+            // place `forward` (the real aim direction) should be used.
+            Vector3 capsuleCenter = feetPosition + Vector3.up * (height * 0.5f);
+            Vector3 toTarget = capsuleCenter - origin;
+            CollectCapsuleSamplePoints(feetPosition, radius, height, toTarget, CapsuleSampleBuffer);
 
             for (int i = 0; i < CapsuleSampleBuffer.Count; i++)
             {
@@ -151,16 +158,23 @@ namespace Tactics.Vision
             return IsInCone(origin, forward, capsuleCenter, expandedHalfAngle);
         }
 
-        private static void CollectCapsuleSamplePoints(
+        /// <summary>
+        /// Exposed for debug visualization (gizmos) — same points used by IsEnemyVisibleAt.
+        /// <paramref name="originToCapsule"/> must be a position-only direction (e.g. origin
+        /// to capsule center), never the observer's raw aim/camera forward — using aim here
+        /// would spin the ring basis whenever the camera rotates in place, with no change in
+        /// the actual origin/target geometry.
+        /// </summary>
+        public static void CollectCapsuleSamplePoints(
             Vector3 feet,
             float radius,
             float height,
-            Vector3 viewForward,
+            Vector3 originToCapsule,
             List<Vector3> points)
         {
             points.Clear();
 
-            Vector3 flatForward = viewForward;
+            Vector3 flatForward = originToCapsule;
             flatForward.y = 0f;
             if (flatForward.sqrMagnitude < 0.001f)
                 flatForward = Vector3.forward;
@@ -168,14 +182,19 @@ namespace Tactics.Vision
 
             Vector3 flatRight = Vector3.Cross(Vector3.up, flatForward).normalized;
 
-            float yBottom = feet.y + radius;
-            float yTop = feet.y + height - radius;
-            float yMid = (yBottom + yTop) * 0.5f;
-            float yUpper = Mathf.Lerp(yMid, yTop, 0.66f);
-            float yLower = Mathf.Lerp(yBottom, yMid, 0.66f);
+            // Belt heights: a lateral ring of the full radius only lies on the real
+            // capsule surface within the cylindrical section (from the top of the
+            // bottom hemisphere to the bottom of the top hemisphere). The poles
+            // themselves (true top-of-head, true feet) pinch to zero radius, so they
+            // must be sampled on-axis instead of via a ring.
+            float yBeltBottom = feet.y + radius;
+            float yBeltTop = feet.y + height - radius;
+            float yMid = (yBeltBottom + yBeltTop) * 0.5f;
+            float yUpper = Mathf.Lerp(yMid, yBeltTop, 0.66f);
+            float yLower = Mathf.Lerp(yBeltBottom, yMid, 0.66f);
 
-            AddCapsuleColumn(points, feet.x, feet.z, yBottom, yMid, yTop);
-            AddViewFacingRing(points, feet.x, feet.z, yTop, flatForward, flatRight, radius);
+            AddCapsuleColumn(points, feet.x, feet.z, feet.y, yMid, feet.y + height);
+            AddViewFacingRing(points, feet.x, feet.z, yBeltTop, flatForward, flatRight, radius);
             AddViewFacingRing(points, feet.x, feet.z, yUpper, flatForward, flatRight, radius);
             AddViewFacingRing(points, feet.x, feet.z, yMid, flatForward, flatRight, radius);
             AddViewFacingRing(points, feet.x, feet.z, yLower, flatForward, flatRight, radius);
