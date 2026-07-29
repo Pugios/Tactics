@@ -45,6 +45,8 @@ namespace Tactics.Vision
         [SerializeField] private bool debugShowMaskTexture;
         [Tooltip("Draws the raw eye depth map in the corner of the game view (bright = close, black = far/empty).")]
         [SerializeField] private bool debugShowEyeDepth;
+        [Tooltip("Draws the eye camera's normal color view in the corner of the game view")]
+        [SerializeField] private bool debugShowEyeView;
 
         /// <summary>Body sample points as fractions of enemy height: head, chest, knees, feet.</summary>
         private static readonly Vector4 SampleHeightFractions = new Vector4(0.95f, 0.55f, 0.25f, 0.075f);
@@ -446,13 +448,28 @@ namespace Tactics.Vision
 
         private void OnGUI()
         {
-            if (!debugShowEyeDepth || eyeDepthTexture == null)
-                return;
+            float nextY = 10f;
 
-            const float size = 320f;
-            var rect = new Rect(10f, 10f, size, size);
-            GUI.DrawTexture(rect, eyeDepthTexture, ScaleMode.ScaleToFit, false);
-            GUI.Label(new Rect(rect.x, rect.yMax + 2f, size, 20f), "Vision eye depth (bright = close)");
+            if (debugShowEyeDepth && eyeDepthTexture != null)
+            {
+                const float size = 320f;
+                var rect = new Rect(10f, nextY, size, size);
+                GUI.DrawTexture(rect, eyeDepthTexture, ScaleMode.ScaleToFit, false);
+                GUI.Label(new Rect(rect.x, rect.yMax + 2f, size, 20f), "Vision eye depth (bright = close)");
+                nextY = rect.yMax + 24f;
+            }
+
+            if (debugShowEyeView && eyeTargetTexture != null && eyeCamera != null)
+            {
+                // eyeTargetTexture is a square pixel buffer, but the camera's projection uses a
+                // non-square aspect (from horizontal/vertical view angle) — size the rect to match
+                // eyeCamera.aspect and stretch-fill, or the image reads as horizontally squashed.
+                const float height = 320f;
+                float width = height * eyeCamera.aspect;
+                var rect = new Rect(10f, nextY, width, height);
+                GUI.DrawTexture(rect, eyeTargetTexture, ScaleMode.StretchToFill, false);
+                GUI.Label(new Rect(rect.x, rect.yMax + 2f, width, 20f), "Vision eye view (first-person)");
+            }
         }
 
         private void OnDrawGizmosSelected()
