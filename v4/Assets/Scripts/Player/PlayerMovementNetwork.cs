@@ -71,6 +71,12 @@ namespace Tactics.Player
         [SerializeField] private float crouchSpeedMultiplier = 0.3f;
         [SerializeField] private float gravity = -9.81f;
 
+        [Header("Crouch")]
+        // Matches PlayerCrouchVisuals' crouchVisibilityHeight and the CPU vision
+        // capsule's crouched height — all three must agree on how tall a crouched
+        // player actually is.
+        [SerializeField] private float crouchControllerHeight = 1.5f;
+
         [Header("Jump")]
         [SerializeField] private float jumpHeight = 0.9f; // apex height in meters, launch speed derived from gravity
         [SerializeField] private float airWishSpeed = 2.5f; // per-tick speed a single input can add toward its direction
@@ -194,6 +200,11 @@ namespace Tactics.Player
         private float verticalVelocity;
         private bool simGrounded;
 
+        // Captured once at Awake, before crouch ever mutates the live controller —
+        // the fixed "standing" baseline that crouch height/center are derived from.
+        private float standingControllerHeight;
+        private Vector3 standingControllerCenter;
+
         #endregion
 
         #region Unity Lifecycle
@@ -205,6 +216,9 @@ namespace Tactics.Player
             playerRespawn = GetComponent<PlayerRespawn>();
             soundEmitter = GetComponent<Tactics.Sound.SoundEmitter>();
             health = GetComponent<Tactics.Combat.Health>();
+
+            standingControllerHeight = characterController.height;
+            standingControllerCenter = characterController.center;
         }
 
         public override void OnNetworkSpawn()
@@ -484,6 +498,8 @@ namespace Tactics.Player
 
         private void Simulate(PlayerInputTick input, float dt, bool emitSound)
         {
+            ApplyCrouchCollider(input.Crouch);
+
             Quaternion rotation = Quaternion.Euler(0f, input.YRotation, 0f);
             Vector3 desired = PlayerMovementSimulation.ComputeHorizontalMove(
                 input.Move, rotation, input.Walk, input.Crouch, runSpeed, walkSpeedMultiplier, crouchSpeedMultiplier);
@@ -546,6 +562,28 @@ namespace Tactics.Player
             characterController.Move(finalMove * dt);
             if (!justJumped)
                 simGrounded = (characterController.collisionFlags & CollisionFlags.Below) != 0;
+        }
+
+        /// <summary>
+        /// Shrinks/restores the CharacterController to match the crouch pose, keeping
+        /// the capsule's bottom fixed at the standing ground-contact point so crouching
+        /// never moves the feet. Called from Simulate() (not LateUpdate/visuals) so the
+        /// owner's prediction and the server's replay resize the collider at the exact
+        /// same point in the simulation, before the Move() call that might depend on it
+        /// (e.g. a future low opening only a crouched player fits through).
+        /// </summary>
+        private void ApplyCrouchCollider(bool crouching)
+        {
+            float targetHeight = crouching ? crouchControllerHeight : standingControllerHeight;
+            if (Mathf.Approximately(characterController.height, targetHeight))
+                return;
+
+            float bottomLocalY = standingControllerCenter.y - standingControllerHeight * 0.5f;
+            characterController.height = targetHeight;
+            characterController.center = new Vector3(
+                standingControllerCenter.x,
+                bottomLocalY + targetHeight * 0.5f,
+                standingControllerCenter.z);
         }
 
         #endregion

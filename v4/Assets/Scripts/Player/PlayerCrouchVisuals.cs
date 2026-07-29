@@ -23,11 +23,20 @@ namespace Tactics.Player
         private CharacterController characterController;
         private Vector3 standingLocalPosition;
 
+        // Captured once at Awake: the CharacterController's own height/center now
+        // change dynamically for crouch collision (PlayerMovementNetwork.ApplyCrouchCollider),
+        // so this can't read characterController.height/center live — it needs the
+        // fixed standing baseline to compute the anchor.
+        private float standingControllerHeight;
+        private Vector3 standingControllerCenter;
+
         private void Awake()
         {
             movementNetwork = GetComponent<PlayerMovementNetwork>();
             characterController = GetComponent<CharacterController>();
             if (visualRoot != null) standingLocalPosition = visualRoot.localPosition;
+            standingControllerHeight = characterController.height;
+            standingControllerCenter = characterController.center;
         }
 
         private void LateUpdate()
@@ -43,10 +52,16 @@ namespace Tactics.Player
                 if (crouching)
                 {
                     // Anchor the shrunk mesh's bottom to the CharacterController's
-                    // actual ground contact point, not to the standing mesh's own
+                    // standing ground contact point, not to the standing mesh's own
                     // (already elevated) bottom edge — otherwise it stays floating.
-                    float groundLocalY = characterController.center.y - characterController.height * 0.5f;
-                    targetLocalY = groundLocalY + scaleY * 0.5f;
+                    // The mesh's unscaled half-height equals the standing capsule's
+                    // half-height (that's what standingVisualScaleY = 1 means), so
+                    // after scaling by scaleY its half-height becomes that value
+                    // times scaleY — NOT scaleY * 0.5, which only halves correctly
+                    // if the unscaled mesh were already exactly 1m tall.
+                    float groundLocalY = standingControllerCenter.y - standingControllerHeight * 0.5f;
+                    float standingHalfHeight = standingControllerHeight * 0.5f / standingVisualScaleY;
+                    targetLocalY = groundLocalY + standingHalfHeight * scaleY;
                 }
                 visualRoot.localPosition = new Vector3(standingLocalPosition.x, targetLocalY, standingLocalPosition.z);
             }

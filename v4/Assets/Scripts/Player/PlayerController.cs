@@ -117,8 +117,12 @@ namespace Tactics.Player
 
         [Header("Vision")]
         [SerializeField] private Transform visionOrigin;
-        [SerializeField] private float eyeHeight = 1.5f;
-        [SerializeField] private float crouchEyeHeight = 1f;
+        // 10cm below the top of the head: standing head-top is 2m (eyeHeight = 1.9),
+        // crouched head-top is 1.5m (crouchEyeHeight = 1.4) — see PlayerCrouchVisuals'
+        // crouchVisibilityHeight and PlayerMovementNetwork's crouchControllerHeight,
+        // which define those same two head-top heights.
+        [SerializeField] private float eyeHeight = 1.9f;
+        [SerializeField] private float crouchEyeHeight = 1.4f;
 
         public Transform VisionOrigin => visionOrigin;
 
