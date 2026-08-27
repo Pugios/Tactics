@@ -20,6 +20,8 @@ namespace Tactics.Weapons
     [DisallowMultipleComponent]
     public class WeaponController : NetworkBehaviour
     {
+        private enum HitZone { Head, Body, Leg }
+
         [SerializeField] private Transform shootPoint;
         [SerializeField] private LayerMask hitLayers;
         [SerializeField] private WeaponData[] weaponRegistry;
@@ -41,6 +43,14 @@ namespace Tactics.Weapons
         // Server-side fire cadence tracking, one per player object.
         private double serverLastFireTime = double.NegativeInfinity;
 
+        // Server-side spray state (SpreadCalculator inputs), per player object.
+        // The seed is rolled once per spawn and the shot number never repeats,
+        // so no two sprays ever roll the same spread offsets.
+        private float serverSprayIndex;
+        private int serverShotNumber;
+        private int spreadSeed;
+        private int serverLastWeaponId = -1;
+
         public int CurrentAmmo => inventory != null ? inventory.GetActiveAmmo() : 0;
         public WeaponData CurrentWeapon => inventory != null ? inventory.GetActiveWeaponData() : null;
         public bool IsReloading => isReloading;
@@ -55,8 +65,22 @@ namespace Tactics.Weapons
 
         public override void OnNetworkSpawn()
         {
+            if (IsServer)
+            {
+                spreadSeed = new System.Random().Next();
+                // A fresh life starts with a settled gun regardless of how the
+                // last one ended mid-spray.
+                if (ownHealth != null) ownHealth.OnDeath += ServerResetSpray;
+            }
             if (!IsOwner) enabled = false;
         }
+
+        public override void OnNetworkDespawn()
+        {
+            if (IsServer && ownHealth != null) ownHealth.OnDeath -= ServerResetSpray;
+        }
+
+        private void ServerResetSpray() => serverSprayIndex = 0f;
 
         private void Start()
         {
@@ -164,13 +188,35 @@ namespace Tactics.Weapons
             // still trusted client-side until the buy/economy systems are networked.
             double now = NetworkManager.ServerTime.Time;
             if (now - serverLastFireTime < (1.0 / weapon.fireRate) * FireRateLeniency) return;
+            float secondsSinceLastShot = (float)(now - serverLastFireTime);
             serverLastFireTime = now;
 
             // The shooter fires from its predicted (current) position; the server's
             // best match for that is its own sim position, not the smoothed view
             // transform.
             Vector3 startPoint = movementNetwork != null ? movementNetwork.AuthoritativePosition : transform.position;
-            ResolveHitServer(weapon, startPoint, aimPoint, ComputeRewindTime());
+
+            // Inaccuracy: the client sends the point under its cursor untouched;
+            // the server displaces it by the spray's recoil + spread, judging
+            // stance/movement from its own authoritative snapshot.
+            if (weaponId != serverLastWeaponId)
+            {
+                // Swapping weapons settles the gun (equip time gates abusing this).
+                serverSprayIndex = 0f;
+                serverLastWeaponId = weaponId;
+            }
+            serverSprayIndex = SpreadCalculator.DecaySprayIndex(serverSprayIndex, secondsSinceLastShot,
+                weapon.sprayDecayDelay, weapon.sprayDecayPerSecond);
+            bool crouched = movementNetwork != null && movementNetwork.AuthoritativeIsCrouching;
+            Tactics.Player.MovementState movement = movementNetwork != null
+                ? movementNetwork.GetAuthoritativeMovementState()
+                : Tactics.Player.MovementState.Stationary;
+            Vector2 offsetDegrees = SpreadCalculator.ComputeShotOffsetDegrees(weapon, serverSprayIndex,
+                crouched, movement, spreadSeed, serverShotNumber++);
+            Vector3 spreadAimPoint = SpreadCalculator.ApplyOffsetToAimPoint(startPoint, aimPoint, offsetDegrees);
+            serverSprayIndex += 1f;
+
+            ResolveHitServer(weapon, startPoint, spreadAimPoint, ComputeRewindTime());
         }
 
         /// <summary>
@@ -191,13 +237,33 @@ namespace Tactics.Weapons
 
         private void ResolveHitServer(WeaponData weapon, Vector3 startPoint, Vector3 aimPoint, float rewindTime)
         {
-            Health target = FindClosestTarget(aimPoint, rewindTime, out Vector3 targetPos, out bool targetGrounded);
-            if (target == null) return;
-
             Vector3 direction = (aimPoint - startPoint).normalized;
-            float distanceToTarget = Vector3.Distance(startPoint, aimPoint);
-            float totalThickness = ComputeWallThickness(startPoint, direction, distanceToTarget);
-            if (totalThickness > MaxWallPenetrationMeters) return;
+            float distanceToAim = Vector3.Distance(startPoint, aimPoint);
+            float totalThickness = ComputeWallThickness(startPoint, direction, distanceToAim, out Vector3 wallEntryPoint, out Vector3 wallEntryNormal);
+
+            if (totalThickness > MaxWallPenetrationMeters)
+            {
+                // Decal should sit flush against the wall face, not tilt with
+                // whatever angle the shot came in at — use the face's own normal.
+                BroadcastImpact(startPoint, wallEntryPoint, -wallEntryNormal, isEnemyHit: false, target: null);
+                return;
+            }
+
+            Health target = FindClosestTarget(aimPoint, rewindTime, out Vector3 targetPos, out bool targetGrounded);
+            if (target == null)
+            {
+                // Ground/prop tops aren't always a flat world-up plane (angled
+                // prop tops etc.), so sample the actual surface normal at the
+                // impact point instead of assuming straight down.
+                Vector3 groundNormal = Vector3.up;
+                int groundMask = (1 << Tactics.Vision.VisionLayerMasks.Ground) | (1 << Tactics.Vision.VisionLayerMasks.Dynamic);
+                if (Physics.Raycast(aimPoint + Vector3.up * 0.5f, Vector3.down, out RaycastHit groundHit, 1f, groundMask))
+                {
+                    groundNormal = groundHit.normal;
+                }
+                BroadcastImpact(startPoint, aimPoint, -groundNormal, isEnemyHit: false, target: null);
+                return;
+            }
 
             // Proximity damage rings on the XZ plane around the target's rewound
             // position — where the shooter saw them, not where they are now.
@@ -205,20 +271,22 @@ namespace Tactics.Weapons
                                                 new Vector2(targetPos.x, targetPos.z));
 
             float hitMultiplier = 0f;
-            bool isPerfect = false;
+            HitZone hitZone = HitZone.Body;
 
             if (xzDistance < 0.5f)
             {
                 hitMultiplier = weapon.perfectMultiplier;
-                isPerfect = true;
+                hitZone = HitZone.Head;
             }
             else if (xzDistance < 0.75f)
             {
                 hitMultiplier = weapon.mediumMultiplier;
+                hitZone = HitZone.Body;
             }
             else if (xzDistance < 1f)
             {
                 hitMultiplier = weapon.lowMultiplier;
+                hitZone = HitZone.Leg;
             }
 
             if (hitMultiplier <= 0f) return;
@@ -236,11 +304,38 @@ namespace Tactics.Weapons
             int damage = (int)finalDamage;
             target.TakeDamage(damage);
 
-            string hitType = isPerfect ? "perfect" : "body";
             string wallbang = totalThickness > 0 ? $", wallbang (thickness {totalThickness:F2}m)" : "";
-            Debug.Log($"[Damage] {damage} to {target.name} ({hitType}{wallbang})");
+            Debug.Log($"[Damage] {damage} to {target.name} ({hitZone}{wallbang})");
 
-            HitConfirmOwnerRpc(damage, isPerfect);
+            HitConfirmOwnerRpc(damage, hitZone);
+            // Enemy decals land on top of the capsule (visible from the top-down
+            // camera), so project straight down for the same reason as ground hits.
+            BroadcastImpact(startPoint, aimPoint, Vector3.down, isEnemyHit: true, target: target);
+        }
+
+        /// <summary>
+        /// Cosmetic-only: tells every peer where a shot ended up so they can spawn
+        /// a tracer/decal. The point always reflects a server-decided outcome
+        /// (blocked-by-wall, miss, or confirmed hit), so this carries no new
+        /// combat trust — only what gets drawn.
+        /// </summary>
+        private void BroadcastImpact(Vector3 origin, Vector3 point, Vector3 decalDirection, bool isEnemyHit, Health target)
+        {
+            NetworkObjectReference targetRef = target != null
+                ? new NetworkObjectReference(target.NetworkObject)
+                : default;
+            ShotImpactClientRpc(origin, point, decalDirection, isEnemyHit, targetRef);
+        }
+
+        [Rpc(SendTo.Everyone)]
+        private void ShotImpactClientRpc(Vector3 origin, Vector3 point, Vector3 decalDirection, bool isEnemyHit, NetworkObjectReference targetRef)
+        {
+            if (Tactics.Weapons.HitFxSpawner.Instance == null) return;
+
+            NetworkObject targetObject = null;
+            if (isEnemyHit) targetRef.TryGet(out targetObject);
+
+            Tactics.Weapons.HitFxSpawner.Instance.SpawnImpact(origin, point, decalDirection, isEnemyHit, targetObject != null ? targetObject.transform : null);
         }
 
         private Health FindClosestTarget(Vector3 aimPoint, float rewindTime, out Vector3 rewoundPosition, out bool rewoundGrounded)
@@ -280,9 +375,12 @@ namespace Tactics.Weapons
         /// the same way as straight-through shots. Returns +infinity when the
         /// bullet never exits a wall before reaching the target (stopped).
         /// </summary>
-        private static float ComputeWallThickness(Vector3 startPoint, Vector3 direction, float distance)
+        private static float ComputeWallThickness(Vector3 startPoint, Vector3 direction, float distance, out Vector3 firstEntryPoint, out Vector3 firstEntryNormal)
         {
             int wallLayerMask = 1 << Tactics.Vision.VisionLayerMasks.Wall;
+
+            firstEntryPoint = startPoint + direction * distance;
+            firstEntryNormal = -direction;
 
             // Raycasts only report front faces, so exit faces are found by casting
             // the same segment in reverse from the target end.
@@ -291,9 +389,17 @@ namespace Tactics.Weapons
             Vector3 endPoint = startPoint + direction * distance;
             RaycastHit[] exits = Physics.RaycastAll(endPoint, -direction, distance, wallLayerMask);
 
+            float closestEntryDistance = float.PositiveInfinity;
             float totalThickness = 0f;
             foreach (var entry in entries)
             {
+                if (entry.distance < closestEntryDistance)
+                {
+                    closestEntryDistance = entry.distance;
+                    firstEntryPoint = entry.point;
+                    firstEntryNormal = entry.normal;
+                }
+
                 // Both distances measured from startPoint along the shot.
                 float entryDistance = entry.distance;
                 float exitDistance = -1f;
@@ -314,9 +420,9 @@ namespace Tactics.Weapons
         }
 
         [Rpc(SendTo.Owner)]
-        private void HitConfirmOwnerRpc(int damage, bool isPerfect)
+        private void HitConfirmOwnerRpc(int damage, HitZone hitZone)
         {
-            Debug.Log($"[Damage] Hit confirmed: {damage} ({(isPerfect ? "perfect" : "normal")})");
+            Debug.Log($"[Damage] Hit confirmed: {damage} ({hitZone})");
         }
     }
 }

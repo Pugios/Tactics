@@ -122,6 +122,23 @@ namespace Tactics.Player
             : IsOwner ? playerController.IsCrouching
             : authoritativeState.Value.IsCrouching;
 
+        /// <summary>Crouch state of the server's authoritative copy (accuracy stance input).</summary>
+        public bool AuthoritativeIsCrouching => IsSpawned && authoritativeState.Value.IsCrouching;
+
+        /// <summary>
+        /// Movement category of the server's authoritative copy, classified from
+        /// the published snapshot (grounded/crouch/speed) — server-side accuracy
+        /// consumers use this so a client can never claim it was standing still.
+        /// </summary>
+        public MovementState GetAuthoritativeMovementState()
+        {
+            if (!IsSpawned) return MovementState.Stationary;
+            PlayerStateSnapshot snapshot = authoritativeState.Value;
+            float horizontalSpeed = new Vector2(snapshot.HorizontalVelocity.x, snapshot.HorizontalVelocity.z).magnitude;
+            return MovementClassifier.Classify(snapshot.Grounded, snapshot.IsCrouching, horizontalSpeed,
+                runSpeed, walkSpeedMultiplier);
+        }
+
         #endregion
 
         #region Component Refs & Networked State

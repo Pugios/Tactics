@@ -32,6 +32,55 @@ MonoBehaviour:
   bodyDamageFalloff: 0
   legDamageFalloff: 0
   runSpeedPercent: 1
+  infiniteAmmo: 0
+  firstShotSpreadStanding: 0.25
+  firstShotSpreadCrouched: 0.21
+  maxSpreadStanding: 1
+  maxSpreadCrouched: 0.85
+  spreadPerShotDegrees: 0.11
+  movePenaltyCrouchWalk: 0.8
+  movePenaltyWalk: 3
+  movePenaltyRun: 6
+  movePenaltyAirborne: 10
+  recoilClimbDegrees: 4
+  recoilClimbShots: 7
+  recoilClimbCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 0.3375056
+      value: 0.28810015
+      inSlope: 2.8093085
+      outSlope: 2.8093085
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.1846322
+      outWeight: 0.09142163
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 1.8
+      outSlope: 1.8
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  recoilSwayDegrees: 2
+  recoilSwayPeriodShots: 5
+  sprayDecayDelay: 0.15
+  sprayDecayPerSecond: 15
   perfectMultiplier: 1
   mediumMultiplier: 0.25
   lowMultiplier: 0.21
