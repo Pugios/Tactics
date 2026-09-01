@@ -14,11 +14,39 @@ namespace Tactics.Tests.EditMode
         {
             WeaponData weapon = ScriptableObject.CreateInstance<WeaponData>();
             weapon.altFireType = AltFireType.AimDownSight;
+            weapon.adsMode = AdsMode.Hold;
+            weapon.adsZoomLevels = new[] { 1.25f };
+            weapon.adsMoveSpeedMultiplier = 0.76f;
             weapon.adsFireRateMultiplier = 0.9f;
             weapon.adsFirstShotSpreadStanding = 0.157f;
             weapon.adsFirstShotSpreadCrouched = 0.13f;
             weapon.adsMaxSpreadStanding = 1.02f;
             weapon.adsMaxSpreadCrouched = 0.87f;
+            return weapon;
+        }
+
+        /// <summary>Operator-shaped weapon: toggle 2.5×/5× scope, huge flat hip spread, perfect ADS accuracy.</summary>
+        private static WeaponData MakeOperator()
+        {
+            WeaponData weapon = ScriptableObject.CreateInstance<WeaponData>();
+            weapon.firstShotSpreadStanding = 5f;
+            weapon.firstShotSpreadCrouched = 4.5f;
+            weapon.maxSpreadStanding = 5f;
+            weapon.maxSpreadCrouched = 4.5f;
+            weapon.spreadPerShotDegrees = 0f;
+            weapon.movePenaltyCrouchWalk = 7.5f;
+            weapon.movePenaltyWalk = 10f;
+            weapon.movePenaltyRun = 15f;
+            weapon.movePenaltyAirborne = 15f;
+            weapon.altFireType = AltFireType.AimDownSight;
+            weapon.adsMode = AdsMode.Toggle;
+            weapon.adsZoomLevels = new[] { 2.5f, 5f };
+            weapon.adsMoveSpeedMultiplier = 0.72f;
+            weapon.adsFireRateMultiplier = 1f;
+            weapon.adsFirstShotSpreadStanding = 0f;
+            weapon.adsFirstShotSpreadCrouched = 0f;
+            weapon.adsMaxSpreadStanding = 0f;
+            weapon.adsMaxSpreadCrouched = 0f;
             return weapon;
         }
 
@@ -181,6 +209,39 @@ namespace Tactics.Tests.EditMode
             Assert.AreEqual(stationary + weapon.movePenaltyRun, running, 0.0001f);
         }
 
+        // --- Operator (sniper) profile ---
+
+        [Test]
+        public void Operator_HipFire_SpreadConstantAcrossSpray()
+        {
+            WeaponData weapon = MakeOperator();
+
+            Assert.AreEqual(5f, SpreadCalculator.ComputeSpreadDegrees(weapon, 0f, false, false, MovementState.Stationary), 0.0001f);
+            Assert.AreEqual(5f, SpreadCalculator.ComputeSpreadDegrees(weapon, 25f, false, false, MovementState.Stationary), 0.0001f);
+            Assert.AreEqual(4.5f, SpreadCalculator.ComputeSpreadDegrees(weapon, 0f, true, false, MovementState.Stationary), 0.0001f);
+            Assert.AreEqual(4.5f, SpreadCalculator.ComputeSpreadDegrees(weapon, 25f, true, false, MovementState.Stationary), 0.0001f);
+        }
+
+        [Test]
+        public void Operator_Scoped_Stationary_IsPerfectlyAccurate()
+        {
+            WeaponData weapon = MakeOperator();
+
+            Assert.AreEqual(0f, SpreadCalculator.ComputeSpreadDegrees(weapon, 0f, false, true, MovementState.Stationary));
+            Assert.AreEqual(0f, SpreadCalculator.ComputeSpreadDegrees(weapon, 25f, true, true, MovementState.Stationary));
+        }
+
+        [Test]
+        public void Operator_Scoped_SharesPrimaryMovementPenalties()
+        {
+            WeaponData weapon = MakeOperator();
+
+            Assert.AreEqual(7.5f, SpreadCalculator.ComputeSpreadDegrees(weapon, 0f, true, true, MovementState.CrouchWalking), 0.0001f);
+            Assert.AreEqual(10f, SpreadCalculator.ComputeSpreadDegrees(weapon, 0f, false, true, MovementState.Walking), 0.0001f);
+            Assert.AreEqual(15f, SpreadCalculator.ComputeSpreadDegrees(weapon, 0f, false, true, MovementState.Running), 0.0001f);
+            Assert.AreEqual(15f, SpreadCalculator.ComputeSpreadDegrees(weapon, 0f, false, true, MovementState.Airborne), 0.0001f);
+        }
+
         // --- Recoil T ---
 
         [Test]
@@ -305,6 +366,59 @@ namespace Tactics.Tests.EditMode
             Vector3 aim = new Vector3(3f, 0f, 3f);
 
             Assert.AreEqual(aim, SpreadCalculator.ApplyOffsetToAimPoint(shooter, aim, new Vector2(5f, 5f)));
+        }
+    }
+
+    public class AdsZoomLogicTests
+    {
+        private static WeaponData MakeToggleSniper()
+        {
+            WeaponData weapon = ScriptableObject.CreateInstance<WeaponData>();
+            weapon.altFireType = AltFireType.AimDownSight;
+            weapon.adsMode = AdsMode.Toggle;
+            weapon.adsZoomLevels = new[] { 2.5f, 5f };
+            return weapon;
+        }
+
+        [Test]
+        public void LevelCount_RequiresAdsTypeAndLevels()
+        {
+            Assert.AreEqual(2, AdsZoomLogic.LevelCount(MakeToggleSniper()));
+            Assert.AreEqual(0, AdsZoomLogic.LevelCount(null));
+
+            WeaponData noAds = ScriptableObject.CreateInstance<WeaponData>();
+            Assert.AreEqual(0, AdsZoomLogic.LevelCount(noAds)); // altFireType None
+
+            WeaponData emptyLevels = MakeToggleSniper();
+            emptyLevels.adsZoomLevels = new float[0];
+            Assert.AreEqual(0, AdsZoomLogic.LevelCount(emptyLevels));
+        }
+
+        [Test]
+        public void NextToggleLevel_CyclesThroughAllLevelsThenBackToZero()
+        {
+            Assert.AreEqual(1, AdsZoomLogic.NextToggleLevel(0, 2));
+            Assert.AreEqual(2, AdsZoomLogic.NextToggleLevel(1, 2));
+            Assert.AreEqual(0, AdsZoomLogic.NextToggleLevel(2, 2));
+        }
+
+        [Test]
+        public void NextToggleLevel_NoLevels_StaysAtZero()
+        {
+            Assert.AreEqual(0, AdsZoomLogic.NextToggleLevel(0, 0));
+            Assert.AreEqual(0, AdsZoomLogic.NextToggleLevel(3, 0));
+        }
+
+        [Test]
+        public void ZoomForLevel_MapsLevelsAndClampsOutOfRange()
+        {
+            WeaponData weapon = MakeToggleSniper();
+
+            Assert.AreEqual(1f, AdsZoomLogic.ZoomForLevel(weapon, 0));
+            Assert.AreEqual(2.5f, AdsZoomLogic.ZoomForLevel(weapon, 1));
+            Assert.AreEqual(5f, AdsZoomLogic.ZoomForLevel(weapon, 2));
+            Assert.AreEqual(1f, AdsZoomLogic.ZoomForLevel(weapon, 3));
+            Assert.AreEqual(1f, AdsZoomLogic.ZoomForLevel(null, 1));
         }
     }
 

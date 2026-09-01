@@ -22,7 +22,7 @@ namespace Tactics.Player
         private Vector2 moveInput;
         private bool isWalking;
         private bool isCrouching;
-        private bool isAiming;
+        private int adsZoomLevel;
         private bool jumpQueued;
 
         public Vector2 MoveInput => moveInput;
@@ -30,12 +30,21 @@ namespace Tactics.Player
         public bool IsCrouching => isCrouching;
 
         /// <summary>
-        /// Owner-local ADS state: right click held while the active weapon's
-        /// alt-fire is AimDownSight. Single source of truth consumed by the
-        /// movement tick (76% speed), the weapon's client cadence gate, and the
-        /// vision zoom.
+        /// Owner-local ADS state: nonzero zoom level on an AimDownSight weapon —
+        /// hold-mode weapons (Vandal) aim while right click is held, toggle-mode
+        /// weapons (Operator) cycle levels per press. Single source of truth
+        /// consumed by the movement tick (ADS speed), the weapon's client
+        /// cadence gate, and the vision zoom.
         /// </summary>
-        public bool IsAiming => isAiming;
+        public bool IsAiming => adsZoomLevel > 0;
+
+        /// <summary>Tan-space vision zoom for the current ADS level (1 = no zoom).</summary>
+        public float CurrentZoomMultiplier =>
+            Tactics.Weapons.AdsZoomLogic.ZoomForLevel(
+                weaponInventory != null ? weaponInventory.GetActiveWeaponData() : null, adsZoomLevel);
+
+        /// <summary>Drops back to no zoom (weapon switch, reload start).</summary>
+        public void ResetAdsZoom() => adsZoomLevel = 0;
 
         /// <summary>Consumes a queued jump press. Latched between Updates so a tap that
         /// releases before the next network tick still gets seen.</summary>
@@ -61,6 +70,16 @@ namespace Tactics.Player
             jumpAction = InputSystem.actions.FindAction("Jump");
             centerCameraAction = InputSystem.actions.FindAction("CenterCamera");
             altFireAction = InputSystem.actions.FindAction("AltFire");
+
+            // A toggle zoom must not survive into a different weapon (also fires
+            // when a buy lands in the active slot).
+            if (weaponInventory != null) weaponInventory.OnActiveWeaponChanged += ResetAdsZoom;
+        }
+
+        public override void OnDestroy()
+        {
+            if (weaponInventory != null) weaponInventory.OnActiveWeaponChanged -= ResetAdsZoom;
+            base.OnDestroy();
         }
 
         public override void OnNetworkSpawn()
@@ -199,11 +218,23 @@ namespace Tactics.Player
             return false;
         }
 
-        private bool ActiveWeaponHasAds()
+        private void SampleAdsInput()
         {
-            if (weaponInventory == null) return false;
-            var weapon = weaponInventory.GetActiveWeaponData();
-            return weapon != null && weapon.altFireType == Tactics.Weapons.AltFireType.AimDownSight;
+            var weapon = weaponInventory != null ? weaponInventory.GetActiveWeaponData() : null;
+            int levelCount = Tactics.Weapons.AdsZoomLogic.LevelCount(weapon);
+
+            if (levelCount == 0 || altFireAction == null)
+            {
+                adsZoomLevel = 0;
+            }
+            else if (weapon.adsMode == Tactics.Weapons.AdsMode.Hold)
+            {
+                adsZoomLevel = altFireAction.IsPressed() ? 1 : 0;
+            }
+            else if (altFireAction.WasPressedThisFrame() && !weaponInventory.IsEquipping)
+            {
+                adsZoomLevel = Tactics.Weapons.AdsZoomLogic.NextToggleLevel(adsZoomLevel, levelCount);
+            }
         }
 
         private void SampleInput()
@@ -211,7 +242,7 @@ namespace Tactics.Player
             moveInput = moveAction.ReadValue<Vector2>();
             isWalking = walkAction.IsPressed();
             isCrouching = crouchAction.IsPressed();
-            isAiming = altFireAction != null && altFireAction.IsPressed() && ActiveWeaponHasAds();
+            SampleAdsInput();
             if (jumpAction != null && jumpAction.WasPressedThisFrame()) jumpQueued = true;
         }
     }

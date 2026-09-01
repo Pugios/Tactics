@@ -56,6 +56,20 @@ namespace Tactics.Weapons
         public bool IsReloading => isReloading;
         public event System.Action OnAmmoChanged;
 
+        // Registry index of the owner's active weapon, refreshed on every weapon
+        // change. Rides in PlayerInputTick so the movement sim (owner prediction
+        // AND server replay) can resolve per-weapon speed from its own registry.
+        private int activeWeaponRegistryId = -1;
+
+        public int ActiveWeaponRegistryId => activeWeaponRegistryId;
+
+        /// <summary>Registry lookup with bounds validation; null for -1/invalid ids.</summary>
+        public WeaponData GetRegistryWeapon(int weaponId)
+        {
+            if (weaponRegistry == null || weaponId < 0 || weaponId >= weaponRegistry.Length) return null;
+            return weaponRegistry[weaponId];
+        }
+
         private void Awake()
         {
             inventory = GetComponent<WeaponInventory>();
@@ -91,6 +105,11 @@ namespace Tactics.Weapons
 
             inventory.OnActiveWeaponChanged += HandleActiveWeaponChanged;
             inventory.OnAmmoChanged += HandleAmmoChanged;
+
+            // The inventory equips its defaults in its own Start (before this
+            // subscription exists), so seed the cache instead of waiting for the
+            // next weapon change.
+            RefreshActiveWeaponRegistryId();
         }
 
         private void OnDestroy()
@@ -100,12 +119,26 @@ namespace Tactics.Weapons
             inventory.OnAmmoChanged -= HandleAmmoChanged;
         }
 
-        private void HandleActiveWeaponChanged() => OnAmmoChanged?.Invoke();
+        private void HandleActiveWeaponChanged()
+        {
+            RefreshActiveWeaponRegistryId();
+            OnAmmoChanged?.Invoke();
+        }
+
         private void HandleAmmoChanged() => OnAmmoChanged?.Invoke();
+
+        private void RefreshActiveWeaponRegistryId()
+        {
+            var weapon = CurrentWeapon;
+            activeWeaponRegistryId = weapon != null && weaponRegistry != null
+                ? System.Array.IndexOf(weaponRegistry, weapon)
+                : -1;
+        }
 
         private void Update()
         {
             if (isReloading) return;
+            if (inventory.IsEquipping) return; // no firing or reloading during the draw
 
             var currentWeapon = CurrentWeapon;
 
@@ -127,6 +160,9 @@ namespace Tactics.Weapons
         private System.Collections.IEnumerator Reload()
         {
             isReloading = true;
+            // Reloading drops a toggle scope (Operator); a held hold-mode ADS
+            // (Vandal) re-arms itself next frame from the still-pressed button.
+            if (playerController != null) playerController.ResetAdsZoom();
 
             int ammoBeforeReload = inventory.GetActiveAmmo();
 
@@ -145,6 +181,7 @@ namespace Tactics.Weapons
         {
             var currentWeapon = CurrentWeapon;
             if (currentWeapon == null) return;
+            if (inventory.IsEquipping) return;
             // IsAiming is already gated on the active weapon having an ADS alt-fire.
             float effectiveFireRate = currentWeapon.fireRate
                 * (playerController != null && playerController.IsAiming ? currentWeapon.adsFireRateMultiplier : 1f);

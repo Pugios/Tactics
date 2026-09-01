@@ -6,6 +6,7 @@ namespace Tactics.Weapons
     public enum FireMode { Semi, Auto, Burst }
     public enum WallPenetration { Low, Medium, High }
     public enum AltFireType { None = 0, AimDownSight = 1 }
+    public enum AdsMode { Hold = 0, Toggle = 1 }
 
     [CreateAssetMenu(fileName = "NewWeapon", menuName = "Tactics/Weapon Data")]
     public class WeaponData : ScriptableObject
@@ -79,7 +80,13 @@ namespace Tactics.Weapons
 
         [Header("Alt Fire")]
         public AltFireType altFireType = AltFireType.None;
-        public float zoomMultiplier = 1.0f; // tan-space FOV divisor while ADS (1.25 → 103°→90.3°)
+        // Hold: aim while the button is held (Vandal). Toggle: each press cycles
+        // no-zoom → level 1 → ... → no-zoom (Operator).
+        public AdsMode adsMode = AdsMode.Hold;
+        // Tan-space FOV divisors per zoom level (1.25 → 103°→90.3°); index 0 is
+        // zoom level 1. Empty = this weapon cannot ADS even with type AimDownSight.
+        public float[] adsZoomLevels = new float[0];
+        public float adsMoveSpeedMultiplier = 1.0f;
         public float adsFireRateMultiplier = 1.0f;
         // ADS spread column, replacing the hip-fire first/max values while aiming.
         // Movement penalties are shared with hip-fire.

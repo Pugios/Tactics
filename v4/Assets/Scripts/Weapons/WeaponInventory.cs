@@ -36,6 +36,14 @@ namespace Tactics.Weapons
         public EquipSlot ActiveSlot { get; private set; } = EquipSlot.Melee;
         public bool HasSpike { get; private set; }
 
+        // Valorant-style equip time: after the active weapon changes, firing,
+        // reloading, and toggle-zoom cycling are blocked until the new weapon's
+        // equipSpeed has elapsed. Client-trusted, like ammo, until the
+        // buy/economy systems are networked.
+        private float equipReadyTime;
+
+        public bool IsEquipping => Time.time < equipReadyTime;
+
         public event Action OnActiveWeaponChanged;
         public event Action OnInventoryChanged;
         public event Action OnAmmoChanged;
@@ -75,6 +83,7 @@ namespace Tactics.Weapons
             if (defaultMelee != null) Equip(EquipSlot.Melee, defaultMelee);
             if (defaultSidearm != null) Equip(EquipSlot.Sidearm, defaultSidearm);
             ActiveSlot = EquipSlot.Melee;
+            equipReadyTime = 0f; // spawning in doesn't count as drawing a weapon
             OnActiveWeaponChanged?.Invoke();
         }
 
@@ -108,7 +117,12 @@ namespace Tactics.Weapons
             state.Ammo = data.magazineSize;
             state.Reserve = data.reserveAmmo;
 
-            if (slot == ActiveSlot) OnActiveWeaponChanged?.Invoke();
+            if (slot == ActiveSlot)
+            {
+                // A buy landing in the hands counts as drawing the new weapon.
+                BeginEquipDelay();
+                OnActiveWeaponChanged?.Invoke();
+            }
             OnInventoryChanged?.Invoke();
         }
 
@@ -128,7 +142,14 @@ namespace Tactics.Weapons
             }
 
             ActiveSlot = slot;
+            BeginEquipDelay();
             OnActiveWeaponChanged?.Invoke();
+        }
+
+        private void BeginEquipDelay()
+        {
+            var data = GetActiveWeaponData();
+            equipReadyTime = Time.time + (data != null ? data.equipSpeed : 0f);
         }
 
         public WeaponData GetActiveWeaponData()
@@ -239,6 +260,7 @@ namespace Tactics.Weapons
             if (ActiveSlot == EquipSlot.Spike)
             {
                 ActiveSlot = EquipSlot.Melee;
+                BeginEquipDelay();
                 OnActiveWeaponChanged?.Invoke();
             }
         }

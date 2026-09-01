@@ -57,14 +57,14 @@ namespace Tactics.Vision
         private static readonly Vector4 SampleHeightFractions = new Vector4(0.95f, 0.55f, 0.25f, 0.075f);
 
         private PlayerController playerController;
-        private Tactics.Weapons.WeaponInventory weaponInventory;
         private Vector3 aimOrigin;
         private Vector3 aimTarget;
         private bool aimValid;
 
         // ADS zoom: the vision cone narrows in tan-space by the active weapon's
-        // zoomMultiplier while aiming. Only the smoothed multiplier changes at
-        // runtime — the serialized base angles are never mutated.
+        // current zoom level (PlayerController.CurrentZoomMultiplier). Only the
+        // smoothed multiplier changes at runtime — the serialized base angles
+        // are never mutated.
         private float currentZoomMultiplier = 1f;
         private float zoomVelocity;
 
@@ -132,7 +132,6 @@ namespace Tactics.Vision
         private void Awake()
         {
             playerController = GetComponent<PlayerController>();
-            weaponInventory = GetComponent<Tactics.Weapons.WeaponInventory>();
         }
 
         /// <summary>
@@ -148,12 +147,7 @@ namespace Tactics.Vision
 
         private void UpdateAdsZoom()
         {
-            float targetZoom = 1f;
-            if (playerController != null && playerController.IsAiming && weaponInventory != null)
-            {
-                var weapon = weaponInventory.GetActiveWeaponData();
-                if (weapon != null) targetZoom = Mathf.Max(1f, weapon.zoomMultiplier);
-            }
+            float targetZoom = playerController != null ? playerController.CurrentZoomMultiplier : 1f;
 
             currentZoomMultiplier = Mathf.SmoothDamp(currentZoomMultiplier, targetZoom, ref zoomVelocity, adsZoomSmoothTime);
             if (Mathf.Abs(currentZoomMultiplier - targetZoom) < 0.001f)

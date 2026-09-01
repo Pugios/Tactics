@@ -12,6 +12,11 @@ namespace Tactics.Player
         public bool Crouch;
         public bool Jump;
         public bool Ads;
+        // Registry index of the held weapon (see WeaponController.weaponRegistry),
+        // -1 for none. The sim resolves it against the server's OWN registry copy
+        // for per-weapon speed (runSpeedPercent, adsMoveSpeedMultiplier), so a
+        // client can pick which weapon's multipliers apply but never their values.
+        public int WeaponId;
         public float YRotation;
     }
 
@@ -75,7 +80,9 @@ namespace Tactics.Player
         [SerializeField] private float runSpeed = 5.4f; // Typical Valorant speed
         [SerializeField] private float walkSpeedMultiplier = 0.5f;
         [SerializeField] private float crouchSpeedMultiplier = 0.3f;
-        [SerializeField] private float adsSpeedMultiplier = 0.76f; // stacks multiplicatively on walk/crouch
+        // ADS and held-weapon speed multipliers are per-weapon (WeaponData
+        // adsMoveSpeedMultiplier / runSpeedPercent), resolved via the weapon id
+        // carried in each input tick.
         [SerializeField] private float gravity = -9.81f;
 
         [Header("Crouch")]
@@ -155,6 +162,7 @@ namespace Tactics.Player
 
         private CharacterController characterController;
         private PlayerController playerController;
+        private Tactics.Weapons.WeaponController weaponController;
         private PlayerRespawn playerRespawn;
         private Tactics.Sound.SoundEmitter soundEmitter;
         private Tactics.Combat.Health health;
@@ -240,6 +248,7 @@ namespace Tactics.Player
         {
             characterController = GetComponent<CharacterController>();
             playerController = GetComponent<PlayerController>();
+            weaponController = GetComponent<Tactics.Weapons.WeaponController>();
             playerRespawn = GetComponent<PlayerRespawn>();
             soundEmitter = GetComponent<Tactics.Sound.SoundEmitter>();
             health = GetComponent<Tactics.Combat.Health>();
@@ -370,6 +379,7 @@ namespace Tactics.Player
                 Crouch = playerController.IsCrouching,
                 Jump = playerController.ConsumeJumpQueued(),
                 Ads = playerController.IsAiming,
+                WeaponId = weaponController != null ? weaponController.ActiveWeaponRegistryId : -1,
                 YRotation = transform.eulerAngles.y
             };
             hasFrozenInput = true;
@@ -535,9 +545,17 @@ namespace Tactics.Player
             ApplyCrouchCollider(input.Crouch);
 
             Quaternion rotation = Quaternion.Euler(0f, input.YRotation, 0f);
+            // Per-weapon speed: both the owner's prediction and the server's
+            // replay resolve the SAME prefab-serialized registry, so the sim
+            // stays deterministic across the wire.
+            Tactics.Weapons.WeaponData heldWeapon = weaponController != null
+                ? weaponController.GetRegistryWeapon(input.WeaponId)
+                : null;
+            float weaponRunSpeedPercent = heldWeapon != null ? heldWeapon.runSpeedPercent : 1f;
+            float adsSpeedMultiplier = heldWeapon != null ? heldWeapon.adsMoveSpeedMultiplier : 1f;
             Vector3 desired = PlayerMovementSimulation.ComputeHorizontalMove(
                 input.Move, rotation, input.Walk, input.Crouch, input.Ads,
-                runSpeed, walkSpeedMultiplier, crouchSpeedMultiplier, adsSpeedMultiplier);
+                runSpeed * weaponRunSpeedPercent, walkSpeedMultiplier, crouchSpeedMultiplier, adsSpeedMultiplier);
 
             bool justJumped = false;
 
