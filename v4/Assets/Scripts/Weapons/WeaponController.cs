@@ -27,7 +27,6 @@ namespace Tactics.Weapons
         [SerializeField] private WeaponData[] weaponRegistry;
 
         private const float MaxWallPenetrationMeters = 1f;
-        private const float HitRadius = 1f; // widest damage ring (leg shot)
         private const float FireRateLeniency = 0.85f; // server cadence check tolerates network jitter
         private const float MaxRewindSeconds = 1f; // lag-comp favor-the-shooter cap
 
@@ -273,17 +272,17 @@ namespace Tactics.Weapons
             float hitMultiplier = 0f;
             HitZone hitZone = HitZone.Body;
 
-            if (xzDistance < 0.5f)
+            if (xzDistance < HitZoneRadii.Head)
             {
                 hitMultiplier = weapon.perfectMultiplier;
                 hitZone = HitZone.Head;
             }
-            else if (xzDistance < 0.75f)
+            else if (xzDistance < HitZoneRadii.Body)
             {
                 hitMultiplier = weapon.mediumMultiplier;
                 hitZone = HitZone.Body;
             }
-            else if (xzDistance < 1f)
+            else if (xzDistance < HitZoneRadii.Leg)
             {
                 hitMultiplier = weapon.lowMultiplier;
                 hitZone = HitZone.Leg;
@@ -344,7 +343,7 @@ namespace Tactics.Weapons
             // point), so lag compensation needs no physics-scene rewind — just
             // each candidate's recorded position at the rewind time.
             Health best = null;
-            float bestXzDistance = HitRadius;
+            float bestXzDistance = HitZoneRadii.Leg; // widest damage ring
             rewoundPosition = Vector3.zero;
             rewoundGrounded = true;
 

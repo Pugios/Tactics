@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Rendering.Universal;
 
 namespace Tactics.Vision
 {
@@ -17,6 +18,7 @@ namespace Tactics.Vision
 
         private bool isVisible;
         private Renderer[] renderers;
+        private DecalProjector[] projectors;
 
         public Vector3 FeetPosition => feetTransform != null ? feetTransform.position : transform.position;
         public float HeightOverride => heightOverride;
@@ -53,6 +55,14 @@ namespace Tactics.Vision
                 visualRoot = gameObject;
 
             renderers = visualRoot.GetComponentsInChildren<Renderer>(true);
+            // DecalProjector is not a Renderer, but leaking an enemy's ground
+            // rings through fog of war would betray their position, so
+            // projectors get the same visibility toggling.
+            projectors = visualRoot.GetComponentsInChildren<DecalProjector>(true);
+
+            // A projector/renderer created after OnEnable must immediately
+            // inherit the entity's current hidden/visible state.
+            ApplyVisibility();
         }
 
         public void SetVisible(bool visible)
@@ -73,6 +83,17 @@ namespace Tactics.Vision
             {
                 if (renderers[i] != null)
                     renderers[i].enabled = isVisible;
+            }
+
+            if (projectors == null)
+                return;
+
+            // Null guard: enemy hit decals are parented under targets and
+            // self-destroy after their fade.
+            for (int i = 0; i < projectors.Length; i++)
+            {
+                if (projectors[i] != null)
+                    projectors[i].enabled = isVisible;
             }
         }
     }

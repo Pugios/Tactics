@@ -269,6 +269,7 @@ GameObject:
   - component: {fileID: 6531346233383105}
   - component: {fileID: 8738903659734149788}
   - component: {fileID: 22463577205608760}
+  - component: {fileID: 8000000000000010}
   m_Layer: 9
   m_Name: Player
   m_TagString: Player
@@ -331,7 +332,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  GlobalObjectIdHash: 441723687
+  GlobalObjectIdHash: 2942363196
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
@@ -699,3 +700,23 @@ MonoBehaviour:
   standingVisualScaleY: 1
   crouchVisualScaleY: 0.75
   crouchVisibilityHeight: 1.5
+--- !u!114 &8000000000000010
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8415391576674575487}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3ec78d9b95db4498af17889fd0dcb6f1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Tactics::Tactics.Weapons.HitZoneRingProjector
+  ShowTopMostFoldoutHeaderGroup: 1
+  ringMaterial: {fileID: 2100000, guid: 2d3cbc507d9148f0ab2de7eac5301aa2, type: 2}
+  showOnLocalPlayer: 0
+  headColor: {r: 1, g: 0.25, b: 0.2, a: 0.55}
+  bodyColor: {r: 1, g: 0.6, b: 0.1, a: 0.45}
+  legColor: {r: 0.9716981, g: 0.9677182, b: 0.0045834924, a: 0.3}
+  projectionDepth: 20
+  aboveFeetMargin: 0.5

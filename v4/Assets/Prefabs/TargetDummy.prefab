@@ -17,6 +17,7 @@ GameObject:
   - component: {fileID: 3452378711052876527}
   - component: {fileID: 1530668327537399}
   - component: {fileID: 1530668327537400}
+  - component: {fileID: 8000000000000011}
   m_Layer: 9
   m_Name: TargetDummy
   m_TagString: Untagged
@@ -234,3 +235,17 @@ Transform:
   m_Children: []
   m_Father: {fileID: 2371711522111374543}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &8000000000000011
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8747852200803307993}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3ec78d9b95db4498af17889fd0dcb6f1, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Tactics::Tactics.Weapons.HitZoneRingProjector
+  ringMaterial: {fileID: 2100000, guid: 2d3cbc507d9148f0ab2de7eac5301aa2, type: 2}
+  showOnLocalPlayer: 0
