@@ -2,9 +2,11 @@ namespace Tactics.Player
 {
     /// <summary>
     /// Movement category a player occupies for accuracy purposes, ordered from
-    /// most to least accurate. Derived from simulation state (grounded, crouch,
-    /// horizontal speed) rather than raw input so the server can classify a
-    /// shooter from its own authoritative snapshot — clients never report it.
+    /// most to least accurate. Classified from the CHOSEN inputs (crouch/walk),
+    /// not from the speed those inputs produced: speed modifiers that don't
+    /// change the player's movement choice (ADS, future slows) must never shift
+    /// the spread band. The server classifies from its own authoritative
+    /// snapshot's input-derived flags — clients never report the category.
     /// </summary>
     public enum MovementState
     {
@@ -17,19 +19,17 @@ namespace Tactics.Player
 
     public static class MovementClassifier
     {
-        // Grounded movement snaps instantly to exactly 0 / crouch / walk / run
-        // speed (no acceleration), so thresholds only need to split those bands.
+        // Actual velocity only decides moving vs not (e.g. pushing into a wall
+        // counts as standing still); grounded movement snaps instantly to its
+        // band speed, so a tiny epsilon suffices.
         private const float StationarySpeedEpsilon = 0.05f;
 
-        public static MovementState Classify(bool grounded, bool crouching, float horizontalSpeed,
-            float runSpeed, float walkSpeedMultiplier)
+        public static MovementState Classify(bool grounded, bool crouching, bool walking, float horizontalSpeed)
         {
             if (!grounded) return MovementState.Airborne;
             if (horizontalSpeed < StationarySpeedEpsilon) return MovementState.Stationary;
             if (crouching) return MovementState.CrouchWalking;
-
-            float walkRunThreshold = runSpeed * (walkSpeedMultiplier + 1f) * 0.5f;
-            return horizontalSpeed > walkRunThreshold ? MovementState.Running : MovementState.Walking;
+            return walking ? MovementState.Walking : MovementState.Running;
         }
     }
 }

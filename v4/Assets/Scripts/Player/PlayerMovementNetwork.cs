@@ -11,6 +11,7 @@ namespace Tactics.Player
         public bool Walk;
         public bool Crouch;
         public bool Jump;
+        public bool Ads;
         public float YRotation;
     }
 
@@ -23,6 +24,11 @@ namespace Tactics.Player
         public float VerticalVelocity;
         public bool Grounded;
         public bool IsCrouching;
+        // Input-derived stance flags for server-side accuracy consumers: the
+        // spread classifier judges what movement the player CHOSE (inputs), not
+        // the speed those inputs happened to produce.
+        public bool IsWalking;
+        public bool IsAds;
         // Bumped on every server-side hard teleport (respawn). Consumers compare
         // against the last count they saw and snap instead of smoothing/reconciling,
         // since a teleport is not a misprediction.
@@ -69,6 +75,7 @@ namespace Tactics.Player
         [SerializeField] private float runSpeed = 5.4f; // Typical Valorant speed
         [SerializeField] private float walkSpeedMultiplier = 0.5f;
         [SerializeField] private float crouchSpeedMultiplier = 0.3f;
+        [SerializeField] private float adsSpeedMultiplier = 0.76f; // stacks multiplicatively on walk/crouch
         [SerializeField] private float gravity = -9.81f;
 
         [Header("Crouch")]
@@ -125,18 +132,21 @@ namespace Tactics.Player
         /// <summary>Crouch state of the server's authoritative copy (accuracy stance input).</summary>
         public bool AuthoritativeIsCrouching => IsSpawned && authoritativeState.Value.IsCrouching;
 
+        /// <summary>ADS state of the server's authoritative copy (accuracy stance input).</summary>
+        public bool AuthoritativeIsAds => IsSpawned && authoritativeState.Value.IsAds;
+
         /// <summary>
         /// Movement category of the server's authoritative copy, classified from
-        /// the published snapshot (grounded/crouch/speed) — server-side accuracy
-        /// consumers use this so a client can never claim it was standing still.
+        /// the published snapshot — server-side accuracy consumers use this so a
+        /// client can never claim it was standing still.
         /// </summary>
         public MovementState GetAuthoritativeMovementState()
         {
             if (!IsSpawned) return MovementState.Stationary;
             PlayerStateSnapshot snapshot = authoritativeState.Value;
             float horizontalSpeed = new Vector2(snapshot.HorizontalVelocity.x, snapshot.HorizontalVelocity.z).magnitude;
-            return MovementClassifier.Classify(snapshot.Grounded, snapshot.IsCrouching, horizontalSpeed,
-                runSpeed, walkSpeedMultiplier);
+            return MovementClassifier.Classify(snapshot.Grounded, snapshot.IsCrouching, snapshot.IsWalking,
+                horizontalSpeed);
         }
 
         #endregion
@@ -345,6 +355,8 @@ namespace Tactics.Player
                         VerticalVelocity = verticalVelocity,
                         Grounded = simGrounded,
                         IsCrouching = frozenInput.Crouch,
+                        IsWalking = frozenInput.Walk,
+                        IsAds = frozenInput.Ads,
                         TeleportCount = serverTeleportCount
                     };
                 }
@@ -357,6 +369,7 @@ namespace Tactics.Player
                 Walk = playerController.IsWalking,
                 Crouch = playerController.IsCrouching,
                 Jump = playerController.ConsumeJumpQueued(),
+                Ads = playerController.IsAiming,
                 YRotation = transform.eulerAngles.y
             };
             hasFrozenInput = true;
@@ -447,6 +460,8 @@ namespace Tactics.Player
                 VerticalVelocity = verticalVelocity,
                 Grounded = simGrounded,
                 IsCrouching = input.Crouch,
+                IsWalking = input.Walk,
+                IsAds = input.Ads,
                 TeleportCount = serverTeleportCount
             };
         }
@@ -481,6 +496,8 @@ namespace Tactics.Player
                 VerticalVelocity = 0f,
                 Grounded = false,
                 IsCrouching = false,
+                IsWalking = false,
+                IsAds = false,
                 TeleportCount = serverTeleportCount
             };
 
@@ -519,7 +536,8 @@ namespace Tactics.Player
 
             Quaternion rotation = Quaternion.Euler(0f, input.YRotation, 0f);
             Vector3 desired = PlayerMovementSimulation.ComputeHorizontalMove(
-                input.Move, rotation, input.Walk, input.Crouch, runSpeed, walkSpeedMultiplier, crouchSpeedMultiplier);
+                input.Move, rotation, input.Walk, input.Crouch, input.Ads,
+                runSpeed, walkSpeedMultiplier, crouchSpeedMultiplier, adsSpeedMultiplier);
 
             bool justJumped = false;
 
@@ -739,12 +757,13 @@ namespace Tactics.Player
 
     internal static class PlayerMovementSimulation
     {
-        public static Vector3 ComputeHorizontalMove(Vector2 input, Quaternion rotation, bool walking, bool crouching,
-            float runSpeed, float walkSpeedMultiplier, float crouchSpeedMultiplier)
+        public static Vector3 ComputeHorizontalMove(Vector2 input, Quaternion rotation, bool walking, bool crouching, bool ads,
+            float runSpeed, float walkSpeedMultiplier, float crouchSpeedMultiplier, float adsSpeedMultiplier)
         {
             float speed = runSpeed;
             if (crouching) speed *= crouchSpeedMultiplier;
             else if (walking) speed *= walkSpeedMultiplier;
+            if (ads) speed *= adsSpeedMultiplier;
 
             Vector3 forward = rotation * Vector3.forward;
             Vector3 right = rotation * Vector3.right;

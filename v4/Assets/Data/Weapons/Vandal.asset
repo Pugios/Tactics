@@ -84,6 +84,10 @@ MonoBehaviour:
   perfectMultiplier: 1
   mediumMultiplier: 0.25
   lowMultiplier: 0.21
-  hasAltFire: 0
-  altFireFunction: 
-  zoomMultiplier: 1
+  altFireType: 1
+  zoomMultiplier: 1.25
+  adsFireRateMultiplier: 0.9
+  adsFirstShotSpreadStanding: 0.157
+  adsFirstShotSpreadCrouched: 0.13
+  adsMaxSpreadStanding: 1.02
+  adsMaxSpreadCrouched: 0.87

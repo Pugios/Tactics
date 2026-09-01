@@ -5,6 +5,7 @@ namespace Tactics.Weapons
     public enum WeaponType { Sidearm, SMG, Shotgun, Rifle, Sniper, Melee }
     public enum FireMode { Semi, Auto, Burst }
     public enum WallPenetration { Low, Medium, High }
+    public enum AltFireType { None = 0, AimDownSight = 1 }
 
     [CreateAssetMenu(fileName = "NewWeapon", menuName = "Tactics/Weapon Data")]
     public class WeaponData : ScriptableObject
@@ -77,8 +78,14 @@ namespace Tactics.Weapons
         public float lowMultiplier = 0.28f;
 
         [Header("Alt Fire")]
-        public bool hasAltFire;
-        public string altFireFunction;
-        public float zoomMultiplier = 1.0f;
+        public AltFireType altFireType = AltFireType.None;
+        public float zoomMultiplier = 1.0f; // tan-space FOV divisor while ADS (1.25 → 103°→90.3°)
+        public float adsFireRateMultiplier = 1.0f;
+        // ADS spread column, replacing the hip-fire first/max values while aiming.
+        // Movement penalties are shared with hip-fire.
+        public float adsFirstShotSpreadStanding = 0.25f;
+        public float adsFirstShotSpreadCrouched = 0.21f;
+        public float adsMaxSpreadStanding = 1f;
+        public float adsMaxSpreadCrouched = 0.85f;
     }
 }

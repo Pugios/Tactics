@@ -62,15 +62,22 @@ namespace Tactics.Weapons
         }
 
         /// <summary>
-        /// Current random-cone radius in degrees: stance column, growth over the
-        /// spray, and the movement penalty. The penalty intentionally stacks on
-        /// top of the max-spread cap — running fire is worse than any spray.
+        /// Current random-cone radius in degrees: stance column (ADS swaps in
+        /// the alt-fire first/max values), growth over the spray, and the
+        /// movement penalty. The penalty intentionally stacks on top of the
+        /// max-spread cap — running fire is worse than any spray.
         /// </summary>
         public static float ComputeSpreadDegrees(WeaponData weapon, float sprayIndex,
-            bool crouched, MovementState movement)
+            bool crouched, bool ads, MovementState movement)
         {
-            float first = crouched ? weapon.firstShotSpreadCrouched : weapon.firstShotSpreadStanding;
-            float max = crouched ? weapon.maxSpreadCrouched : weapon.maxSpreadStanding;
+            // Defensive: an ADS flag on a weapon without an ADS alt-fire is ignored.
+            bool useAds = ads && weapon.altFireType == AltFireType.AimDownSight;
+            float first = useAds
+                ? (crouched ? weapon.adsFirstShotSpreadCrouched : weapon.adsFirstShotSpreadStanding)
+                : (crouched ? weapon.firstShotSpreadCrouched : weapon.firstShotSpreadStanding);
+            float max = useAds
+                ? (crouched ? weapon.adsMaxSpreadCrouched : weapon.adsMaxSpreadStanding)
+                : (crouched ? weapon.maxSpreadCrouched : weapon.maxSpreadStanding);
             float spread = Mathf.Min(first + weapon.spreadPerShotDegrees * sprayIndex, max);
 
             switch (movement)
@@ -91,11 +98,11 @@ namespace Tactics.Weapons
         /// with a predicting client.
         /// </summary>
         public static Vector2 ComputeShotOffsetDegrees(WeaponData weapon, float sprayIndex,
-            bool crouched, MovementState movement, int seed, int shotNumber)
+            bool crouched, bool ads, MovementState movement, int seed, int shotNumber)
         {
             Vector2 offset = ComputeRecoilDegrees(weapon, sprayIndex);
 
-            float spread = ComputeSpreadDegrees(weapon, sprayIndex, crouched, movement);
+            float spread = ComputeSpreadDegrees(weapon, sprayIndex, crouched, ads, movement);
             HashShot(seed, shotNumber, out float u1, out float u2);
             float rollAngle = u1 * 2f * Mathf.PI;
             float rollRadius = Mathf.Sqrt(u2) * spread; // sqrt → uniform over the cone's disc

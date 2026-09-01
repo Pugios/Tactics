@@ -33,6 +33,7 @@ namespace Tactics.Weapons
         private WeaponInventory inventory;
         private Health ownHealth;
         private Tactics.Player.PlayerMovementNetwork movementNetwork;
+        private Tactics.Player.PlayerController playerController;
         private InputAction attackAction;
         private InputAction reloadAction;
         private float lastFireTime;
@@ -60,6 +61,7 @@ namespace Tactics.Weapons
             inventory = GetComponent<WeaponInventory>();
             ownHealth = GetComponent<Health>();
             movementNetwork = GetComponent<Tactics.Player.PlayerMovementNetwork>();
+            playerController = GetComponent<Tactics.Player.PlayerController>();
         }
 
         public override void OnNetworkSpawn()
@@ -143,7 +145,10 @@ namespace Tactics.Weapons
         {
             var currentWeapon = CurrentWeapon;
             if (currentWeapon == null) return;
-            if (Time.time < lastFireTime + (1f / currentWeapon.fireRate)) return;
+            // IsAiming is already gated on the active weapon having an ADS alt-fire.
+            float effectiveFireRate = currentWeapon.fireRate
+                * (playerController != null && playerController.IsAiming ? currentWeapon.adsFireRateMultiplier : 1f);
+            if (Time.time < lastFireTime + (1f / effectiveFireRate)) return;
             if (!currentWeapon.infiniteAmmo && inventory.GetActiveAmmo() <= 0) return;
 
             Shoot(currentWeapon);
@@ -185,8 +190,16 @@ namespace Tactics.Weapons
 
             // Cadence re-check on the server clock. Ammo/inventory ownership is
             // still trusted client-side until the buy/economy systems are networked.
+            // ADS stance comes from the authoritative movement snapshot, never the
+            // client. A press/release between shots can make the client's assumed
+            // rate differ from the server's for one shot, but the worst mismatch
+            // (0.9 × 0.85 = 0.765/rate required vs 0.9/rate fired) is inside the
+            // leniency window, so legitimate shots are never swallowed.
+            bool ads = movementNetwork != null && movementNetwork.AuthoritativeIsAds
+                && weapon.altFireType == AltFireType.AimDownSight;
+            double fireInterval = 1.0 / (weapon.fireRate * (ads ? weapon.adsFireRateMultiplier : 1f));
             double now = NetworkManager.ServerTime.Time;
-            if (now - serverLastFireTime < (1.0 / weapon.fireRate) * FireRateLeniency) return;
+            if (now - serverLastFireTime < fireInterval * FireRateLeniency) return;
             float secondsSinceLastShot = (float)(now - serverLastFireTime);
             serverLastFireTime = now;
 
@@ -211,7 +224,7 @@ namespace Tactics.Weapons
                 ? movementNetwork.GetAuthoritativeMovementState()
                 : Tactics.Player.MovementState.Stationary;
             Vector2 offsetDegrees = SpreadCalculator.ComputeShotOffsetDegrees(weapon, serverSprayIndex,
-                crouched, movement, spreadSeed, serverShotNumber++);
+                crouched, ads, movement, spreadSeed, serverShotNumber++);
             Vector3 spreadAimPoint = SpreadCalculator.ApplyOffsetToAimPoint(startPoint, aimPoint, offsetDegrees);
             serverSprayIndex += 1f;
 

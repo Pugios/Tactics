@@ -22,6 +22,8 @@ namespace Tactics.Vision
         [SerializeField, Range(1f, 170f)] private float horizontalViewAngle = 103f;
         [SerializeField, Range(1f, 170f)] private float verticalViewAngle = 70.53f;
         [SerializeField] private float maxViewDistance = 500f;
+        [Tooltip("SmoothDamp time (seconds) for the ADS zoom transition on the vision cone.")]
+        [SerializeField] private float adsZoomSmoothTime = 0.15f;
 
         [Header("Enemy Proportions")]
         [SerializeField] private float enemyHeight = 2f;
@@ -55,9 +57,16 @@ namespace Tactics.Vision
         private static readonly Vector4 SampleHeightFractions = new Vector4(0.95f, 0.55f, 0.25f, 0.075f);
 
         private PlayerController playerController;
+        private Tactics.Weapons.WeaponInventory weaponInventory;
         private Vector3 aimOrigin;
         private Vector3 aimTarget;
         private bool aimValid;
+
+        // ADS zoom: the vision cone narrows in tan-space by the active weapon's
+        // zoomMultiplier while aiming. Only the smoothed multiplier changes at
+        // runtime — the serialized base angles are never mutated.
+        private float currentZoomMultiplier = 1f;
+        private float zoomVelocity;
 
         private UnityEngine.Camera eyeCamera;
         private RenderTexture eyeTargetTexture;
@@ -112,8 +121,8 @@ namespace Tactics.Vision
         }
 
         public VisionConfig Config => new VisionConfig(
-            horizontalViewAngle,
-            verticalViewAngle,
+            EffectiveViewAngle(horizontalViewAngle),
+            EffectiveViewAngle(verticalViewAngle),
             maxViewDistance,
             enemyHeight,
             enemyRadius,
@@ -123,6 +132,35 @@ namespace Tactics.Vision
         private void Awake()
         {
             playerController = GetComponent<PlayerController>();
+            weaponInventory = GetComponent<Tactics.Weapons.WeaponInventory>();
+        }
+
+        /// <summary>
+        /// Base view angle narrowed by the current (smoothed) zoom in tan-space —
+        /// the same math a camera zoom uses, so 1.25× maps 103°→90.3° and
+        /// 70.53°→58.9°. Drives the CPU cone (Config) and GPU eye camera alike.
+        /// </summary>
+        private float EffectiveViewAngle(float baseAngle)
+        {
+            if (currentZoomMultiplier <= 1.0001f) return baseAngle;
+            return 2f * Mathf.Atan(Mathf.Tan(baseAngle * 0.5f * Mathf.Deg2Rad) / currentZoomMultiplier) * Mathf.Rad2Deg;
+        }
+
+        private void UpdateAdsZoom()
+        {
+            float targetZoom = 1f;
+            if (playerController != null && playerController.IsAiming && weaponInventory != null)
+            {
+                var weapon = weaponInventory.GetActiveWeaponData();
+                if (weapon != null) targetZoom = Mathf.Max(1f, weapon.zoomMultiplier);
+            }
+
+            currentZoomMultiplier = Mathf.SmoothDamp(currentZoomMultiplier, targetZoom, ref zoomVelocity, adsZoomSmoothTime);
+            if (Mathf.Abs(currentZoomMultiplier - targetZoom) < 0.001f)
+            {
+                currentZoomMultiplier = targetZoom;
+                zoomVelocity = 0f;
+            }
         }
 
         public override void OnNetworkSpawn()
@@ -172,6 +210,7 @@ namespace Tactics.Vision
         {
             horizontalViewAngle = Mathf.Clamp(horizontalViewAngle, 1f, 170f);
             verticalViewAngle = Mathf.Clamp(verticalViewAngle, 1f, 170f);
+            adsZoomSmoothTime = Mathf.Max(0f, adsZoomSmoothTime);
             maxViewDistance = Mathf.Max(1f, maxViewDistance);
             enemyRadius = Mathf.Max(0.01f, enemyRadius);
             enemyHeight = Mathf.Max(enemyRadius * 2f, enemyHeight);
@@ -183,6 +222,7 @@ namespace Tactics.Vision
         private void LateUpdate()
         {
             RefreshAimState();
+            UpdateAdsZoom();
             UpdateEyeCamera();
             DrawAimDebugLines();
         }
@@ -320,12 +360,14 @@ namespace Tactics.Vision
             Vector3 up = Mathf.Abs(Vector3.Dot(aimTarget, Vector3.up)) > 0.999f ? Vector3.forward : Vector3.up;
             eyeCamera.transform.SetPositionAndRotation(aimOrigin, Quaternion.LookRotation(aimTarget, up));
 
+            float effectiveVertical = EffectiveViewAngle(verticalViewAngle);
+            float effectiveHorizontal = EffectiveViewAngle(horizontalViewAngle);
             eyeCamera.nearClipPlane = eyeNearClip;
             eyeCamera.farClipPlane = maxViewDistance;
-            eyeCamera.fieldOfView = verticalViewAngle;
+            eyeCamera.fieldOfView = effectiveVertical;
             eyeCamera.aspect =
-                Mathf.Tan(horizontalViewAngle * 0.5f * Mathf.Deg2Rad) /
-                Mathf.Tan(verticalViewAngle * 0.5f * Mathf.Deg2Rad);
+                Mathf.Tan(effectiveHorizontal * 0.5f * Mathf.Deg2Rad) /
+                Mathf.Tan(effectiveVertical * 0.5f * Mathf.Deg2Rad);
 
             eyeViewMatrix = eyeCamera.worldToCameraMatrix;
             eyeViewProjection = VisionEyeDepthCapturePass.LastEyeViewProjection != Matrix4x4.zero

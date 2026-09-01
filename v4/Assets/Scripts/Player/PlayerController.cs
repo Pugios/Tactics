@@ -15,15 +15,27 @@ namespace Tactics.Player
         private InputAction crouchAction;
         private InputAction jumpAction;
         private InputAction centerCameraAction;
+        private InputAction altFireAction;
+
+        private Tactics.Weapons.WeaponInventory weaponInventory;
 
         private Vector2 moveInput;
         private bool isWalking;
         private bool isCrouching;
+        private bool isAiming;
         private bool jumpQueued;
 
         public Vector2 MoveInput => moveInput;
         public bool IsWalking => isWalking;
         public bool IsCrouching => isCrouching;
+
+        /// <summary>
+        /// Owner-local ADS state: right click held while the active weapon's
+        /// alt-fire is AimDownSight. Single source of truth consumed by the
+        /// movement tick (76% speed), the weapon's client cadence gate, and the
+        /// vision zoom.
+        /// </summary>
+        public bool IsAiming => isAiming;
 
         /// <summary>Consumes a queued jump press. Latched between Updates so a tap that
         /// releases before the next network tick still gets seen.</summary>
@@ -37,6 +49,7 @@ namespace Tactics.Player
         private void Awake()
         {
             mainCamera = UnityEngine.Camera.main;
+            weaponInventory = GetComponent<Tactics.Weapons.WeaponInventory>();
             if (visionOrigin != null) visionOriginStandingLocalY = visionOrigin.localPosition.y;
         }
 
@@ -47,6 +60,7 @@ namespace Tactics.Player
             crouchAction = InputSystem.actions.FindAction("Crouch");
             jumpAction = InputSystem.actions.FindAction("Jump");
             centerCameraAction = InputSystem.actions.FindAction("CenterCamera");
+            altFireAction = InputSystem.actions.FindAction("AltFire");
         }
 
         public override void OnNetworkSpawn()
@@ -185,11 +199,19 @@ namespace Tactics.Player
             return false;
         }
 
+        private bool ActiveWeaponHasAds()
+        {
+            if (weaponInventory == null) return false;
+            var weapon = weaponInventory.GetActiveWeaponData();
+            return weapon != null && weapon.altFireType == Tactics.Weapons.AltFireType.AimDownSight;
+        }
+
         private void SampleInput()
         {
             moveInput = moveAction.ReadValue<Vector2>();
             isWalking = walkAction.IsPressed();
             isCrouching = crouchAction.IsPressed();
+            isAiming = altFireAction != null && altFireAction.IsPressed() && ActiveWeaponHasAds();
             if (jumpAction != null && jumpAction.WasPressedThisFrame()) jumpQueued = true;
         }
     }

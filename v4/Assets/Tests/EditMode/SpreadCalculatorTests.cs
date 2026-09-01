@@ -9,10 +9,17 @@ namespace Tactics.Tests.EditMode
     {
         private const int Seed = 12345;
 
-        /// <summary>Vandal-shaped weapon (the WeaponData field defaults) built fresh per test.</summary>
+        /// <summary>Vandal-shaped weapon (the WeaponData field defaults, plus the Vandal's ADS block) built fresh per test.</summary>
         private static WeaponData MakeRifle()
         {
-            return ScriptableObject.CreateInstance<WeaponData>();
+            WeaponData weapon = ScriptableObject.CreateInstance<WeaponData>();
+            weapon.altFireType = AltFireType.AimDownSight;
+            weapon.adsFireRateMultiplier = 0.9f;
+            weapon.adsFirstShotSpreadStanding = 0.157f;
+            weapon.adsFirstShotSpreadCrouched = 0.13f;
+            weapon.adsMaxSpreadStanding = 1.02f;
+            weapon.adsMaxSpreadCrouched = 0.87f;
+            return weapon;
         }
 
         /// <summary>Spread zeroed out so only the deterministic recoil T remains.</summary>
@@ -38,8 +45,8 @@ namespace Tactics.Tests.EditMode
         {
             WeaponData weapon = MakeRifle();
 
-            Vector2 a = SpreadCalculator.ComputeShotOffsetDegrees(weapon, 4.2f, false, MovementState.Walking, Seed, 17);
-            Vector2 b = SpreadCalculator.ComputeShotOffsetDegrees(weapon, 4.2f, false, MovementState.Walking, Seed, 17);
+            Vector2 a = SpreadCalculator.ComputeShotOffsetDegrees(weapon, 4.2f, false, false, MovementState.Walking, Seed, 17);
+            Vector2 b = SpreadCalculator.ComputeShotOffsetDegrees(weapon, 4.2f, false, false, MovementState.Walking, Seed, 17);
 
             Assert.AreEqual(a, b);
         }
@@ -49,8 +56,8 @@ namespace Tactics.Tests.EditMode
         {
             WeaponData weapon = MakeRifle();
 
-            Vector2 a = SpreadCalculator.ComputeShotOffsetDegrees(weapon, 4.2f, false, MovementState.Stationary, Seed, 17);
-            Vector2 b = SpreadCalculator.ComputeShotOffsetDegrees(weapon, 4.2f, false, MovementState.Stationary, Seed, 18);
+            Vector2 a = SpreadCalculator.ComputeShotOffsetDegrees(weapon, 4.2f, false, false, MovementState.Stationary, Seed, 17);
+            Vector2 b = SpreadCalculator.ComputeShotOffsetDegrees(weapon, 4.2f, false, false, MovementState.Stationary, Seed, 18);
 
             Assert.AreNotEqual(a, b);
         }
@@ -76,7 +83,7 @@ namespace Tactics.Tests.EditMode
             for (int shot = 0; shot < 100; shot++)
             {
                 Vector2 offset = SpreadCalculator.ComputeShotOffsetDegrees(
-                    weapon, 0f, false, MovementState.Stationary, Seed, shot);
+                    weapon, 0f, false, false, MovementState.Stationary, Seed, shot);
                 Assert.LessOrEqual(offset.magnitude, weapon.firstShotSpreadStanding + 0.0001f);
             }
         }
@@ -86,9 +93,9 @@ namespace Tactics.Tests.EditMode
         {
             WeaponData weapon = MakeRifle();
 
-            float atStart = SpreadCalculator.ComputeSpreadDegrees(weapon, 0f, false, MovementState.Stationary);
-            float midSpray = SpreadCalculator.ComputeSpreadDegrees(weapon, 4f, false, MovementState.Stationary);
-            float longSpray = SpreadCalculator.ComputeSpreadDegrees(weapon, 100f, false, MovementState.Stationary);
+            float atStart = SpreadCalculator.ComputeSpreadDegrees(weapon, 0f, false, false, MovementState.Stationary);
+            float midSpray = SpreadCalculator.ComputeSpreadDegrees(weapon, 4f, false, false, MovementState.Stationary);
+            float longSpray = SpreadCalculator.ComputeSpreadDegrees(weapon, 100f, false, false, MovementState.Stationary);
 
             Assert.Less(atStart, midSpray);
             Assert.Less(midSpray, longSpray);
@@ -100,8 +107,8 @@ namespace Tactics.Tests.EditMode
         {
             WeaponData weapon = MakeRifle();
 
-            float standing = SpreadCalculator.ComputeSpreadDegrees(weapon, 0f, false, MovementState.Stationary);
-            float crouched = SpreadCalculator.ComputeSpreadDegrees(weapon, 0f, true, MovementState.Stationary);
+            float standing = SpreadCalculator.ComputeSpreadDegrees(weapon, 0f, false, false, MovementState.Stationary);
+            float crouched = SpreadCalculator.ComputeSpreadDegrees(weapon, 0f, true, false, MovementState.Stationary);
 
             Assert.Less(crouched, standing);
         }
@@ -111,16 +118,67 @@ namespace Tactics.Tests.EditMode
         {
             WeaponData weapon = MakeRifle();
 
-            float stationary = SpreadCalculator.ComputeSpreadDegrees(weapon, 0f, false, MovementState.Stationary);
-            float crouchWalk = SpreadCalculator.ComputeSpreadDegrees(weapon, 0f, true, MovementState.CrouchWalking);
-            float walking = SpreadCalculator.ComputeSpreadDegrees(weapon, 0f, false, MovementState.Walking);
-            float running = SpreadCalculator.ComputeSpreadDegrees(weapon, 0f, false, MovementState.Running);
-            float airborne = SpreadCalculator.ComputeSpreadDegrees(weapon, 0f, false, MovementState.Airborne);
+            float stationary = SpreadCalculator.ComputeSpreadDegrees(weapon, 0f, false, false, MovementState.Stationary);
+            float crouchWalk = SpreadCalculator.ComputeSpreadDegrees(weapon, 0f, true, false, MovementState.CrouchWalking);
+            float walking = SpreadCalculator.ComputeSpreadDegrees(weapon, 0f, false, false, MovementState.Walking);
+            float running = SpreadCalculator.ComputeSpreadDegrees(weapon, 0f, false, false, MovementState.Running);
+            float airborne = SpreadCalculator.ComputeSpreadDegrees(weapon, 0f, false, false, MovementState.Airborne);
 
             Assert.Less(stationary, crouchWalk);
             Assert.Less(crouchWalk, walking);
             Assert.Less(walking, running);
             Assert.Less(running, airborne);
+        }
+
+        // --- ADS (alt-fire) spread column ---
+
+        [Test]
+        public void Ads_FirstShot_UsesAdsColumn_TighterThanHipFire()
+        {
+            WeaponData weapon = MakeRifle();
+
+            float hipStanding = SpreadCalculator.ComputeSpreadDegrees(weapon, 0f, false, false, MovementState.Stationary);
+            float adsStanding = SpreadCalculator.ComputeSpreadDegrees(weapon, 0f, false, true, MovementState.Stationary);
+            float adsCrouched = SpreadCalculator.ComputeSpreadDegrees(weapon, 0f, true, true, MovementState.Stationary);
+
+            Assert.AreEqual(0.157f, adsStanding, 0.0001f);
+            Assert.AreEqual(0.13f, adsCrouched, 0.0001f);
+            Assert.Less(adsStanding, hipStanding);
+        }
+
+        [Test]
+        public void Ads_LongSpray_CapsAtAdsMaxSpread()
+        {
+            WeaponData weapon = MakeRifle();
+
+            float standing = SpreadCalculator.ComputeSpreadDegrees(weapon, 100f, false, true, MovementState.Stationary);
+            float crouched = SpreadCalculator.ComputeSpreadDegrees(weapon, 100f, true, true, MovementState.Stationary);
+
+            Assert.AreEqual(1.02f, standing, 0.0001f);
+            Assert.AreEqual(0.87f, crouched, 0.0001f);
+        }
+
+        [Test]
+        public void Ads_OnWeaponWithoutAdsAltFire_IsIgnored()
+        {
+            WeaponData weapon = MakeRifle();
+            weapon.altFireType = AltFireType.None;
+
+            float hip = SpreadCalculator.ComputeSpreadDegrees(weapon, 3f, false, false, MovementState.Walking);
+            float claimedAds = SpreadCalculator.ComputeSpreadDegrees(weapon, 3f, false, true, MovementState.Walking);
+
+            Assert.AreEqual(hip, claimedAds);
+        }
+
+        [Test]
+        public void Ads_MovementPenalty_StacksSameAsHipFire()
+        {
+            WeaponData weapon = MakeRifle();
+
+            float stationary = SpreadCalculator.ComputeSpreadDegrees(weapon, 0f, false, true, MovementState.Stationary);
+            float running = SpreadCalculator.ComputeSpreadDegrees(weapon, 0f, false, true, MovementState.Running);
+
+            Assert.AreEqual(stationary + weapon.movePenaltyRun, running, 0.0001f);
         }
 
         // --- Recoil T ---
@@ -170,7 +228,7 @@ namespace Tactics.Tests.EditMode
         {
             WeaponData weapon = MakeRecoilOnlyRifle();
 
-            Vector2 offset = SpreadCalculator.ComputeShotOffsetDegrees(weapon, 5f, false, MovementState.Running, Seed, 3);
+            Vector2 offset = SpreadCalculator.ComputeShotOffsetDegrees(weapon, 5f, false, false, MovementState.Running, Seed, 3);
             Vector2 recoil = SpreadCalculator.ComputeRecoilDegrees(weapon, 5f);
 
             Assert.AreEqual(recoil, offset);
@@ -253,35 +311,48 @@ namespace Tactics.Tests.EditMode
     public class MovementClassifierTests
     {
         private const float RunSpeed = 5.4f;
-        private const float WalkMultiplier = 0.5f;
+        private const float AdsMultiplier = 0.76f;
 
-        private static MovementState Classify(bool grounded, bool crouching, float speed) =>
-            MovementClassifier.Classify(grounded, crouching, speed, RunSpeed, WalkMultiplier);
+        private static MovementState Classify(bool grounded, bool crouching, bool walking, float speed) =>
+            MovementClassifier.Classify(grounded, crouching, walking, speed);
 
         [Test]
         public void Airborne_TrumpsEverything()
         {
-            Assert.AreEqual(MovementState.Airborne, Classify(grounded: false, crouching: true, speed: 0f));
+            Assert.AreEqual(MovementState.Airborne, Classify(grounded: false, crouching: true, walking: true, speed: 0f));
         }
 
         [Test]
-        public void GroundedStill_IsStationary_EvenCrouched()
+        public void GroundedStill_IsStationary_EvenCrouchedOrWalkHeld()
         {
-            Assert.AreEqual(MovementState.Stationary, Classify(grounded: true, crouching: false, speed: 0f));
-            Assert.AreEqual(MovementState.Stationary, Classify(grounded: true, crouching: true, speed: 0f));
+            Assert.AreEqual(MovementState.Stationary, Classify(grounded: true, crouching: false, walking: false, speed: 0f));
+            Assert.AreEqual(MovementState.Stationary, Classify(grounded: true, crouching: true, walking: false, speed: 0f));
+            Assert.AreEqual(MovementState.Stationary, Classify(grounded: true, crouching: false, walking: true, speed: 0f));
         }
 
         [Test]
-        public void CrouchMoving_IsCrouchWalking()
+        public void CrouchInput_WinsOverWalkInput()
         {
-            Assert.AreEqual(MovementState.CrouchWalking, Classify(grounded: true, crouching: true, speed: RunSpeed * 0.3f));
+            Assert.AreEqual(MovementState.CrouchWalking, Classify(grounded: true, crouching: true, walking: true, speed: RunSpeed * 0.3f));
         }
 
         [Test]
-        public void WalkSpeed_IsWalking_RunSpeed_IsRunning()
+        public void WalkInput_IsWalking_NoStanceInput_IsRunning()
         {
-            Assert.AreEqual(MovementState.Walking, Classify(grounded: true, crouching: false, speed: RunSpeed * WalkMultiplier));
-            Assert.AreEqual(MovementState.Running, Classify(grounded: true, crouching: false, speed: RunSpeed));
+            Assert.AreEqual(MovementState.Walking, Classify(grounded: true, crouching: false, walking: true, speed: RunSpeed * 0.5f));
+            Assert.AreEqual(MovementState.Running, Classify(grounded: true, crouching: false, walking: false, speed: RunSpeed));
+        }
+
+        [Test]
+        public void ClassificationFollowsInputs_NotSpeed()
+        {
+            // ADS (or any future slow) reduces speed but not the player's chosen
+            // movement: full-input ADS movement is still Running, and ADS+walk is
+            // still Walking even though its speed is below the old walk band.
+            Assert.AreEqual(MovementState.Running,
+                Classify(grounded: true, crouching: false, walking: false, speed: RunSpeed * AdsMultiplier));
+            Assert.AreEqual(MovementState.Walking,
+                Classify(grounded: true, crouching: false, walking: true, speed: RunSpeed * 0.5f * AdsMultiplier));
         }
     }
 }
