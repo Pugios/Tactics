@@ -21,6 +21,14 @@ namespace Tactics.Weapons
             projector = GetComponent<DecalProjector>();
         }
 
+        /// <summary>Shortens (or extends) this instance's life; the fade still
+        /// runs over the final stretch but never longer than the life itself.</summary>
+        public void SetLifetime(float seconds)
+        {
+            lifetime = seconds;
+            fadeDuration = Mathf.Min(fadeDuration, seconds);
+        }
+
         private void Start()
         {
             spawnTime = Time.time;

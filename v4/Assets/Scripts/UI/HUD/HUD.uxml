@@ -1,6 +1,12 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
     <ui:Style src="HUD.uss" />
     <ui:VisualElement name="hudRoot" style="flex-grow: 1; justify-content: flex-end; align-items: flex-end; background-color: rgba(0, 0, 0, 0);">
+        <ui:VisualElement name="actionBar" class="action-bar">
+            <ui:Label name="actionBarLabel" text="" class="action-bar__label" />
+            <ui:VisualElement name="actionBarTrack" class="action-bar__track">
+                <ui:VisualElement name="actionBarFill" class="action-bar__fill" />
+            </ui:VisualElement>
+        </ui:VisualElement>
         <ui:VisualElement name="weaponSlotsContainer" style="flex-direction: row; margin-right: 40px; margin-bottom: 10px;">
             <ui:VisualElement name="slotPrimary" class="weapon-slot">
                 <ui:Label name="slotPrimaryLabel" text="-" class="weapon-slot__label" />

@@ -41,8 +41,20 @@ namespace Tactics.Weapons
         // equipSpeed has elapsed. Client-trusted, like ammo, until the
         // buy/economy systems are networked.
         private float equipReadyTime;
+        private float equipStartTime;
 
         public bool IsEquipping => Time.time < equipReadyTime;
+
+        /// <summary>0..1 progress of the current draw; 1 when not equipping.</summary>
+        public float EquipProgress01
+        {
+            get
+            {
+                float duration = equipReadyTime - equipStartTime;
+                if (!IsEquipping || duration <= 0f) return 1f;
+                return Mathf.Clamp01((Time.time - equipStartTime) / duration);
+            }
+        }
 
         public event Action OnActiveWeaponChanged;
         public event Action OnInventoryChanged;
@@ -149,6 +161,7 @@ namespace Tactics.Weapons
         private void BeginEquipDelay()
         {
             var data = GetActiveWeaponData();
+            equipStartTime = Time.time;
             equipReadyTime = Time.time + (data != null ? data.equipSpeed : 0f);
         }
 

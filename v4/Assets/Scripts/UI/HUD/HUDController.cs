@@ -23,11 +23,29 @@ namespace Tactics.UI
 
         private System.Action<bool> onSpikeChangedHandler;
 
+        // Bottom-center equip/reload progress bar.
+        private VisualElement actionBar;
+        private Label actionBarLabel;
+        private VisualElement actionBarFill;
+        private string actionBarLastText;
+        private bool actionBarVisible;
+        private WeaponData grabbingTextWeapon;
+        private string grabbingText;
+
+        private const string ActionBarVisibleClass = "action-bar--visible";
+        private const string ReloadingText = "Reloading...";
+
         private void OnEnable()
         {
             var root = uiDocument.rootVisualElement;
             magAmmoLabel = root.Q<Label>("magAmmoLabel");
             reserveAmmoLabel = root.Q<Label>("reserveAmmoLabel");
+
+            actionBar = root.Q<VisualElement>("actionBar");
+            actionBarLabel = root.Q<Label>("actionBarLabel");
+            actionBarFill = root.Q<VisualElement>("actionBarFill");
+            actionBarLastText = null;
+            actionBarVisible = false;
 
             slotPrimary = root.Q<VisualElement>("slotPrimary");
             slotSidearm = root.Q<VisualElement>("slotSidearm");
@@ -48,6 +66,57 @@ namespace Tactics.UI
             {
                 FindWeaponController();
             }
+
+            UpdateActionBar();
+        }
+
+        /// <summary>
+        /// Polls equip/reload progress each frame. Reload and equip are already
+        /// mutually exclusive (equip blocks reload start, reload blocks slot
+        /// switching), so the priority here is only a safety order.
+        /// </summary>
+        private void UpdateActionBar()
+        {
+            if (actionBar == null) return;
+
+            string text = null;
+            float progress = 0f;
+
+            if (weaponController != null && weaponController.IsReloading)
+            {
+                text = ReloadingText;
+                progress = weaponController.ReloadProgress01;
+            }
+            else if (weaponInventory != null && weaponInventory.IsEquipping)
+            {
+                var data = weaponInventory.GetActiveWeaponData();
+                if (data != null)
+                {
+                    // Only build the string when the weapon actually changes.
+                    if (!ReferenceEquals(data, grabbingTextWeapon))
+                    {
+                        grabbingTextWeapon = data;
+                        grabbingText = "Grabbing " + data.weaponName;
+                    }
+                    text = grabbingText;
+                    progress = weaponInventory.EquipProgress01;
+                }
+            }
+
+            bool show = text != null;
+            if (show != actionBarVisible)
+            {
+                actionBar.EnableInClassList(ActionBarVisibleClass, show);
+                actionBarVisible = show;
+            }
+            if (!show) return;
+
+            if (!ReferenceEquals(text, actionBarLastText))
+            {
+                actionBarLabel.text = text;
+                actionBarLastText = text;
+            }
+            actionBarFill.style.width = Length.Percent(progress * 100f);
         }
 
         private void FindWeaponController()

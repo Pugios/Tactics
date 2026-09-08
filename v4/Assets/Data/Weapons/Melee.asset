@@ -12,30 +12,90 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 334cdfe71455f974cbe05a9ab3beaaff, type: 3}
   m_Name: Melee
   m_EditorClassIdentifier: Assembly-CSharp::Tactics.Weapons.WeaponData
-  weaponName: Melee
+  weaponName: Knife
   type: 5
   cost: 0
   wallPenetration: 0
   fireMode: 0
-  fireRate: 2
+  fireRate: 1.6
   magazineSize: 1
   reserveAmmo: 0
   pelletCount: 1
   reloadSpeed: 0
-  equipSpeed: 0.5
-  headDamage: 75
-  bodyDamage: 50
-  legDamage: 40
+  equipSpeed: 0.6
+  headDamage: 0
+  bodyDamage: 0
+  legDamage: 0
   rangeStart: 0
   rangeEnd: 0
   headDamageFalloff: 0
   bodyDamageFalloff: 0
   legDamageFalloff: 0
-  runSpeedPercent: 1
+  damageRanges: []
+  runSpeedPercent: 1.25
+  infiniteAmmo: 1
+  meleeRange: 2
+  meleeFrontDamage: 50
+  meleeBackDamage: 100
+  altMeleeFrontDamage: 75
+  altMeleeBackDamage: 150
+  firstShotSpreadStanding: 0
+  firstShotSpreadCrouched: 0
+  maxSpreadStanding: 0
+  maxSpreadCrouched: 0
+  spreadPerShotDegrees: 0
+  movePenaltyCrouchWalk: 0
+  movePenaltyWalk: 0
+  movePenaltyRun: 0
+  movePenaltyAirborne: 0
+  spreadDistanceExponent: 1
+  recoilClimbDegrees: 0
+  recoilClimbShots: 7
+  recoilClimbCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 1
+      outSlope: 1
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 1
+      outSlope: 1
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  recoilSwayDegrees: 0
+  recoilSwayPeriodShots: 5
+  sprayDecayDelay: 0.15
+  sprayDecayPerSecond: 15
   perfectMultiplier: 1
   mediumMultiplier: 0.33
   lowMultiplier: 0.28
-  hasAltFire: 0
-  altFireFunction:
-  zoomMultiplier: 1
-  infiniteAmmo: 1
+  altFireType: 0
+  adsMode: 0
+  adsZoomLevels: []
+  adsMoveSpeedMultiplier: 1
+  adsFireRateMultiplier: 1
+  adsFirstShotSpreadStanding: 0
+  adsFirstShotSpreadCrouched: 0
+  adsMaxSpreadStanding: 0
+  adsMaxSpreadCrouched: 0
+  altPelletCount: 1
+  altFireRate: 1.1
+  altSpreadPerShotDegrees: 0
+  altMovePenaltyCrouchWalk: 0
+  altMovePenaltyWalk: 0
+  altMovePenaltyRun: 0
+  altMovePenaltyAirborne: 0
+  altSpreadDistanceExponent: 1

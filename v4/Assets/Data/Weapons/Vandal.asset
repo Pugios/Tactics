@@ -15,7 +15,7 @@ MonoBehaviour:
   weaponName: Vandal
   type: 3
   cost: 2900
-  wallPenetration: 0
+  wallPenetration: 1
   fireMode: 0
   fireRate: 5.4
   magazineSize: 25

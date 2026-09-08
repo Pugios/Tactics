@@ -159,6 +159,13 @@ namespace Tactics.Player
 
         public Transform VisionOrigin => visionOrigin;
 
+        /// <summary>
+        /// Eye height above the player's feet for the given stance. The server
+        /// measures wall penetration and draws tracers from here, so it reads the
+        /// same two numbers the vision origin uses rather than duplicating them.
+        /// </summary>
+        public float EyeHeightFor(bool crouched) => crouched ? crouchEyeHeight : eyeHeight;
+
         private float visionOriginStandingLocalY;
 
         private Vector3 lookTarget;

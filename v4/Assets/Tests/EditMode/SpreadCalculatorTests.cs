@@ -18,10 +18,10 @@ namespace Tactics.Tests.EditMode
             weapon.adsZoomLevels = new[] { 1.25f };
             weapon.adsMoveSpeedMultiplier = 0.76f;
             weapon.adsFireRateMultiplier = 0.9f;
-            weapon.adsFirstShotSpreadStanding = 0.157f;
-            weapon.adsFirstShotSpreadCrouched = 0.13f;
-            weapon.adsMaxSpreadStanding = 1.02f;
-            weapon.adsMaxSpreadCrouched = 0.87f;
+            weapon.altFirstShotSpreadStanding = 0.157f;
+            weapon.altFirstShotSpreadCrouched = 0.13f;
+            weapon.altMaxSpreadStanding = 1.02f;
+            weapon.altMaxSpreadCrouched = 0.87f;
             return weapon;
         }
 
@@ -43,10 +43,10 @@ namespace Tactics.Tests.EditMode
             weapon.adsZoomLevels = new[] { 2.5f, 5f };
             weapon.adsMoveSpeedMultiplier = 0.72f;
             weapon.adsFireRateMultiplier = 1f;
-            weapon.adsFirstShotSpreadStanding = 0f;
-            weapon.adsFirstShotSpreadCrouched = 0f;
-            weapon.adsMaxSpreadStanding = 0f;
-            weapon.adsMaxSpreadCrouched = 0f;
+            weapon.altFirstShotSpreadStanding = 0f;
+            weapon.altFirstShotSpreadCrouched = 0f;
+            weapon.altMaxSpreadStanding = 0f;
+            weapon.altMaxSpreadCrouched = 0f;
             return weapon;
         }
 

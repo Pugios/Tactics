@@ -29,6 +29,25 @@ namespace Tactics.Weapons
     public static class SpreadCalculator
     {
         /// <summary>
+        /// Spread degrees are calibrated at this distance: a weapon's pattern
+        /// radius here is always distance · tan(spread°), whatever its
+        /// spreadDistanceExponent. At exponent 1 the reference cancels out.
+        /// </summary>
+        public const float SpreadReferenceDistanceMeters = 10f;
+
+        /// <summary>
+        /// Effective projection distance for a spread pattern: d at exponent 1
+        /// (pure angular cone), √(REF·d) at exponent 0.5 (shotgun pattern that
+        /// grows sub-linearly so ring hits decay ~1/d instead of 1/d²).
+        /// </summary>
+        private static float ProjectionScale(float distance, float distanceExponent)
+        {
+            if (Mathf.Approximately(distanceExponent, 1f)) return distance;
+            return Mathf.Pow(SpreadReferenceDistanceMeters, 1f - distanceExponent)
+                * Mathf.Pow(distance, distanceExponent);
+        }
+
+        /// <summary>
         /// Bleeds the spray index back toward zero for time spent not shooting.
         /// A short grace period keeps normal full-auto cadence from decaying
         /// mid-spray; after it, recovery is gradual — a brief pause resumes the
@@ -62,30 +81,48 @@ namespace Tactics.Weapons
         }
 
         /// <summary>
-        /// Current random-cone radius in degrees: stance column (ADS swaps in
-        /// the alt-fire first/max values), growth over the spray, and the
-        /// movement penalty. The penalty intentionally stacks on top of the
-        /// max-spread cap — running fire is worse than any spray.
+        /// Current random-cone radius in degrees: stance column, growth over the
+        /// spray, and the movement penalty. The penalty intentionally stacks on
+        /// top of the max-spread cap — running fire is worse than any spray.
+        ///
+        /// How much of the weapon's alt-fire column an alt shot takes over
+        /// depends on the alt-fire's type:
+        ///   AimDownSight — first/max spread only; growth and movement penalties
+        ///                  stay on the primary column (aiming a rifle doesn't
+        ///                  change what running costs you).
+        ///   Shotgun      — the whole column: first/max, per-shot growth, and the
+        ///                  movement penalties, because the burst is its own gun.
         /// </summary>
         public static float ComputeSpreadDegrees(WeaponData weapon, float sprayIndex,
-            bool crouched, bool ads, MovementState movement)
+            bool crouched, bool altFire, MovementState movement)
         {
-            // Defensive: an ADS flag on a weapon without an ADS alt-fire is ignored.
-            bool useAds = ads && weapon.altFireType == AltFireType.AimDownSight;
-            float first = useAds
-                ? (crouched ? weapon.adsFirstShotSpreadCrouched : weapon.adsFirstShotSpreadStanding)
+            // Defensive: an alt flag on a weapon without an alt-fire is ignored.
+            bool useAltColumn = altFire && weapon.altFireType != AltFireType.None;
+            bool altOwnsMovement = useAltColumn && weapon.altFireType == AltFireType.Shotgun;
+
+            float first = useAltColumn
+                ? (crouched ? weapon.altFirstShotSpreadCrouched : weapon.altFirstShotSpreadStanding)
                 : (crouched ? weapon.firstShotSpreadCrouched : weapon.firstShotSpreadStanding);
-            float max = useAds
-                ? (crouched ? weapon.adsMaxSpreadCrouched : weapon.adsMaxSpreadStanding)
+            float max = useAltColumn
+                ? (crouched ? weapon.altMaxSpreadCrouched : weapon.altMaxSpreadStanding)
                 : (crouched ? weapon.maxSpreadCrouched : weapon.maxSpreadStanding);
-            float spread = Mathf.Min(first + weapon.spreadPerShotDegrees * sprayIndex, max);
+            float growth = altOwnsMovement ? weapon.altSpreadPerShotDegrees : weapon.spreadPerShotDegrees;
+            float spread = Mathf.Min(first + growth * sprayIndex, max);
 
             switch (movement)
             {
-                case MovementState.CrouchWalking: spread += weapon.movePenaltyCrouchWalk; break;
-                case MovementState.Walking: spread += weapon.movePenaltyWalk; break;
-                case MovementState.Running: spread += weapon.movePenaltyRun; break;
-                case MovementState.Airborne: spread += weapon.movePenaltyAirborne; break;
+                case MovementState.CrouchWalking:
+                    spread += altOwnsMovement ? weapon.altMovePenaltyCrouchWalk : weapon.movePenaltyCrouchWalk;
+                    break;
+                case MovementState.Walking:
+                    spread += altOwnsMovement ? weapon.altMovePenaltyWalk : weapon.movePenaltyWalk;
+                    break;
+                case MovementState.Running:
+                    spread += altOwnsMovement ? weapon.altMovePenaltyRun : weapon.movePenaltyRun;
+                    break;
+                case MovementState.Airborne:
+                    spread += altOwnsMovement ? weapon.altMovePenaltyAirborne : weapon.movePenaltyAirborne;
+                    break;
             }
 
             return spread;
@@ -98,11 +135,11 @@ namespace Tactics.Weapons
         /// with a predicting client.
         /// </summary>
         public static Vector2 ComputeShotOffsetDegrees(WeaponData weapon, float sprayIndex,
-            bool crouched, bool ads, MovementState movement, int seed, int shotNumber)
+            bool crouched, bool altFire, MovementState movement, int seed, int shotNumber)
         {
             Vector2 offset = ComputeRecoilDegrees(weapon, sprayIndex);
 
-            float spread = ComputeSpreadDegrees(weapon, sprayIndex, crouched, ads, movement);
+            float spread = ComputeSpreadDegrees(weapon, sprayIndex, crouched, altFire, movement);
             HashShot(seed, shotNumber, out float u1, out float u2);
             float rollAngle = u1 * 2f * Mathf.PI;
             float rollRadius = Mathf.Sqrt(u2) * spread; // sqrt → uniform over the cone's disc
@@ -113,12 +150,44 @@ namespace Tactics.Weapons
         }
 
         /// <summary>
+        /// All pellet offsets for one trigger pull (shotguns): every pellet
+        /// shares the pull's deterministic recoil and spread radius but draws
+        /// its own disc roll from a consecutive shot number, so the hash
+        /// stream stays strictly increasing and reject-safe — the caller
+        /// advances its shot counter by pelletCount per pull.
+        /// </summary>
+        public static Vector2[] ComputePelletOffsetsDegrees(WeaponData weapon, float sprayIndex,
+            bool crouched, bool altFire, MovementState movement, int seed, int baseShotNumber, int pelletCount)
+        {
+            var offsets = new Vector2[pelletCount];
+            for (int i = 0; i < pelletCount; i++)
+            {
+                offsets[i] = ComputeShotOffsetDegrees(weapon, sprayIndex, crouched, altFire, movement,
+                    seed, baseShotNumber + i);
+            }
+            return offsets;
+        }
+
+        /// <summary>
         /// Projects an angular offset into a displaced world-space aim point:
         /// distance · tan(angle) along the shooter→aim axis (backward) and its
         /// ground-plane perpendicular (sideways). Same angle misses by more at
         /// range, exactly like a first-person inaccuracy cone.
         /// </summary>
         public static Vector3 ApplyOffsetToAimPoint(Vector3 shooterPosition, Vector3 aimPoint, Vector2 offsetDegrees)
+        {
+            return ApplyOffsetToAimPoint(shooterPosition, aimPoint, offsetDegrees, 1f);
+        }
+
+        /// <summary>
+        /// Exponent-aware projection: the angular offset is scaled by
+        /// <see cref="ProjectionScale"/> instead of the raw distance, letting a
+        /// weapon's pattern grow sub-linearly with range (see
+        /// WeaponData.spreadDistanceExponent). Exponent 1 is the classic
+        /// distance · tan(angle) cone.
+        /// </summary>
+        public static Vector3 ApplyOffsetToAimPoint(Vector3 shooterPosition, Vector3 aimPoint,
+            Vector2 offsetDegrees, float distanceExponent)
         {
             Vector3 toAim = aimPoint - shooterPosition;
             toAim.y = 0f;
@@ -128,9 +197,23 @@ namespace Tactics.Weapons
             Vector3 back = toAim / distance;
             Vector3 right = Vector3.Cross(Vector3.up, back);
 
+            float scale = ProjectionScale(distance, distanceExponent);
             return aimPoint
-                + back * (distance * Mathf.Tan(offsetDegrees.y * Mathf.Deg2Rad))
-                + right * (distance * Mathf.Tan(offsetDegrees.x * Mathf.Deg2Rad));
+                + back * (scale * Mathf.Tan(offsetDegrees.y * Mathf.Deg2Rad))
+                + right * (scale * Mathf.Tan(offsetDegrees.x * Mathf.Deg2Rad));
+        }
+
+        /// <summary>
+        /// World-space radius (meters) the spread pattern covers around an aim
+        /// point at the given horizontal shooter→aim distance — the same
+        /// scale · tan(angle) projection <see cref="ApplyOffsetToAimPoint"/>
+        /// uses, so anything drawn with this radius (crosshair circle) exactly
+        /// bounds where pellets can land.
+        /// </summary>
+        public static float ComputeSpreadWorldRadiusMeters(float xzDistance, float spreadDegrees,
+            float distanceExponent)
+        {
+            return ProjectionScale(xzDistance, distanceExponent) * Mathf.Tan(spreadDegrees * Mathf.Deg2Rad);
         }
 
         /// <summary>

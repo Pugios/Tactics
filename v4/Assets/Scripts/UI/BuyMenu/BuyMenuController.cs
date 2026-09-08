@@ -24,6 +24,9 @@ namespace Tactics.UI
         {
             root = uiDocument.rootVisualElement;
             root.style.display = DisplayStyle.None;
+            // The static flag outlives scene loads (and editor domain-reload
+            // settings), so re-sync it with the menu's actual closed state.
+            CrosshairController.MenuOpen = false;
 
             credsLabel = root.Q<Label>("credsLabel");
             
@@ -64,7 +67,11 @@ namespace Tactics.UI
 
             isMenuOpen = !isMenuOpen;
             root.style.display = isMenuOpen ? DisplayStyle.Flex : DisplayStyle.None;
-            
+
+            // Menus need the OS pointer; the crosshair hides itself and hands
+            // the cursor back while this is set.
+            CrosshairController.MenuOpen = isMenuOpen;
+
             // Lock/Unlock player movement/rotation if needed
             // For now just toggle UI
         }

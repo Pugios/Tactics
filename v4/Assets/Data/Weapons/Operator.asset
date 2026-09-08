@@ -15,7 +15,7 @@ MonoBehaviour:
   weaponName: Operator
   type: 4
   cost: 4700
-  wallPenetration: 0
+  wallPenetration: 2
   fireMode: 0
   fireRate: 0.6
   magazineSize: 5

@@ -16,25 +16,85 @@ MonoBehaviour:
   type: 2
   cost: 1850
   wallPenetration: 0
-  fireMode: 0
-  fireRate: 1
-  magazineSize: 7
-  reserveAmmo: 21
-  pelletCount: 1
-  reloadSpeed: 2.5
-  equipSpeed: 0
-  headDamage: 0
+  fireMode: 1
+  fireRate: 3.5
+  magazineSize: 5
+  reserveAmmo: 15
+  pelletCount: 12
+  reloadSpeed: 2.2
+  equipSpeed: 1
+  headDamage: 34
   bodyDamage: 17
-  legDamage: 0
+  legDamage: 14
   rangeStart: 0
   rangeEnd: 0
   headDamageFalloff: 0
   bodyDamageFalloff: 0
   legDamageFalloff: 0
-  runSpeedPercent: 1
+  damageRanges:
+  - maxDistance: 10
+    head: 34
+    body: 17
+    leg: 14
+  - maxDistance: 15
+    head: 20
+    body: 10
+    leg: 8
+  - maxDistance: 50
+    head: 14
+    body: 7
+    leg: 5
+  runSpeedPercent: 0.937
+  infiniteAmmo: 0
+  firstShotSpreadStanding: 8
+  firstShotSpreadCrouched: 7
+  maxSpreadStanding: 9.5
+  maxSpreadCrouched: 8.5
+  spreadPerShotDegrees: 0.5
+  movePenaltyCrouchWalk: 0.5
+  movePenaltyWalk: 1
+  movePenaltyRun: 1
+  movePenaltyAirborne: 4
+  spreadDistanceExponent: 0.5
+  recoilClimbDegrees: 0
+  recoilClimbShots: 7
+  recoilClimbCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 1
+      outSlope: 1
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 1
+      outSlope: 1
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  recoilSwayDegrees: 0
+  recoilSwayPeriodShots: 5
+  sprayDecayDelay: 0.15
+  sprayDecayPerSecond: 15
   perfectMultiplier: 1
-  mediumMultiplier: 0.33
-  lowMultiplier: 0.28
-  hasAltFire: 0
-  altFireFunction: 
-  zoomMultiplier: 1
+  mediumMultiplier: 0.5
+  lowMultiplier: 0.4117647
+  altFireType: 0
+  adsMode: 0
+  adsZoomLevels: []
+  adsMoveSpeedMultiplier: 1
+  adsFireRateMultiplier: 1
+  adsFirstShotSpreadStanding: 8
+  adsFirstShotSpreadCrouched: 7
+  adsMaxSpreadStanding: 9.5
+  adsMaxSpreadCrouched: 8.5

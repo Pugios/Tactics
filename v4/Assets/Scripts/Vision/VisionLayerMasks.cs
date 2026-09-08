@@ -18,6 +18,9 @@ namespace Tactics.Vision
 
         public static LayerMask GroundOnly => 1 << Ground;
 
+        /// <summary>The only geometry a bullet has to penetrate to pass.</summary>
+        public static LayerMask WallOnly => 1 << Wall;
+
         /// <summary>Everything the eye depth camera renders: static occluders plus dynamic bodies.</summary>
         public static LayerMask EyeDepthCulling => DefaultLos | (1 << Dynamic);
     }

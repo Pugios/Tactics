@@ -5,13 +5,17 @@ namespace Tactics.Weapons
     /// <summary>
     /// Purely cosmetic, client-local spawner for shot feedback: a brief tracer
     /// line and a persistent decal at the impact point. Every peer receives the
-    /// same server-resolved impact via <see cref="WeaponController"/>'s
-    /// ShotImpactClientRpc and calls into this to draw it — nothing here is
+    /// same server-resolved impacts via <see cref="WeaponController"/>'s
+    /// ShotImpactsClientRpc and calls into this to draw them — nothing here is
     /// networked itself.
     /// </summary>
     public class HitFxSpawner : MonoBehaviour
     {
         public static HitFxSpawner Instance { get; private set; }
+
+        // Shotgun volleys drop a dozen decals per trigger pull, so pellet decals
+        // fade sooner than the prefab's single-bullet lifetime.
+        public const float PelletDecalLifetime = 4f;
 
         // The decal prefabs' near clip plane sits exactly at the projector's
         // pivot (offset.z - size.z/2 == 0), so spawning flush on the surface
@@ -30,7 +34,8 @@ namespace Tactics.Weapons
             else Destroy(gameObject);
         }
 
-        public void SpawnImpact(Vector3 origin, Vector3 point, Vector3 decalDirection, bool isEnemyHit, Transform target)
+        /// <param name="decalLifetime">Overrides the decal prefab's lifetime when positive.</param>
+        public void SpawnImpact(Vector3 origin, Vector3 point, Vector3 decalDirection, bool isEnemyHit, Transform target, float decalLifetime = -1f)
         {
             if (tracerPrefab != null)
             {
@@ -55,6 +60,7 @@ namespace Tactics.Weapons
                 spawnPoint = point - forward * SurfaceClearance;
             }
             HitDecal decal = Instantiate(decalPrefab, spawnPoint, rotation);
+            if (decalLifetime > 0f) decal.SetLifetime(decalLifetime);
 
             if (isEnemyHit && target != null)
             {

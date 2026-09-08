@@ -22,6 +22,7 @@ namespace Tactics.Combat
         {
             public float Time;
             public Vector3 Position;
+            public float YRotation;
             public bool Grounded;
         }
 
@@ -58,7 +59,13 @@ namespace Tactics.Combat
 
         private void Record()
         {
-            samples.Add(new Sample { Time = Time.time, Position = CurrentPosition, Grounded = CurrentGrounded });
+            samples.Add(new Sample
+            {
+                Time = Time.time,
+                Position = CurrentPosition,
+                YRotation = CurrentYRotation,
+                Grounded = CurrentGrounded,
+            });
             if (samples.Count > Capacity) samples.RemoveAt(0);
         }
 
@@ -96,6 +103,28 @@ namespace Tactics.Combat
             return samples[0].Position;
         }
 
+        /// <summary>Authoritative facing (degrees) at the given server-local Time.time, clamped to the buffer.</summary>
+        public float GetYRotationAt(float time)
+        {
+            if (samples.Count == 0) return CurrentYRotation;
+            if (time >= samples[samples.Count - 1].Time) return samples[samples.Count - 1].YRotation;
+            if (time <= samples[0].Time) return samples[0].YRotation;
+
+            for (int i = samples.Count - 1; i > 0; i--)
+            {
+                Sample older = samples[i - 1];
+                if (older.Time > time) continue;
+
+                Sample newer = samples[i];
+                float span = newer.Time - older.Time;
+                if (span <= 0f) return newer.YRotation;
+                // Angles wrap, so lerp the short way round rather than through 360.
+                return Mathf.LerpAngle(older.YRotation, newer.YRotation, (time - older.Time) / span);
+            }
+
+            return samples[0].YRotation;
+        }
+
         /// <summary>Whether the entity was airborne at the given server-local Time.time, clamped to the buffer.</summary>
         public bool GetGroundedAt(float time)
         {
@@ -120,6 +149,10 @@ namespace Tactics.Combat
         // sim's published snapshot position is the authoritative one; everything
         // else (dummies) is driven by its transform directly.
         private Vector3 CurrentPosition => movement != null ? movement.AuthoritativePosition : transform.position;
+
+        // Same split as CurrentPosition: a player's transform rotation is the
+        // smoothed remote view even on the server, while a dummy's is static and exact.
+        private float CurrentYRotation => movement != null ? movement.AuthoritativeYRotation : transform.eulerAngles.y;
 
         // Dummies have no PlayerMovementNetwork and never leave the ground.
         private bool CurrentGrounded => movement == null || movement.AuthoritativeGrounded;

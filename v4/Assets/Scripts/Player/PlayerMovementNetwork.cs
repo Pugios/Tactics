@@ -124,6 +124,29 @@ namespace Tactics.Player
         /// <summary>Whether the server's authoritative copy of this player is airborne right now.</summary>
         public bool AuthoritativeGrounded => IsSpawned ? authoritativeState.Value.Grounded : true;
 
+        /// <summary>
+        /// Zero-latency grounded state: the owner reads its own predicted
+        /// simulation (updated every rendered frame), everyone else falls back
+        /// to the authoritative snapshot. For owner-side cosmetic consumers
+        /// (crosshair spread preview) that must not lag a jump by RTT.
+        /// </summary>
+        public bool PredictedGrounded => IsSpawned && IsOwner ? simGrounded : AuthoritativeGrounded;
+
+        /// <summary>
+        /// Zero-latency horizontal speed, same sourcing rule as
+        /// <see cref="PredictedGrounded"/> (owner: predicted sim; others: snapshot).
+        /// </summary>
+        public float PredictedHorizontalSpeed
+        {
+            get
+            {
+                Vector3 velocity = IsSpawned && IsOwner ? horizontalVelocity
+                    : IsSpawned ? authoritativeState.Value.HorizontalVelocity
+                    : Vector3.zero;
+                return new Vector2(velocity.x, velocity.z).magnitude;
+            }
+        }
+
         /// <summary>How many ticks in the past remote views are rendered (lag-comp rewind input).</summary>
         public float InterpolationDelayTicks => interpolationDelayTicks;
 
@@ -141,6 +164,16 @@ namespace Tactics.Player
 
         /// <summary>ADS state of the server's authoritative copy (accuracy stance input).</summary>
         public bool AuthoritativeIsAds => IsSpawned && authoritativeState.Value.IsAds;
+
+        /// <summary>
+        /// The server's true facing for this player. Same rule as
+        /// <see cref="AuthoritativePosition"/>: UpdateRemoteView drives the
+        /// transform's rotation from the interpolation-delayed view buffer even
+        /// on the server, so anything judging where a player was actually
+        /// looking (melee front/back) must read the snapshot, not transform.forward.
+        /// </summary>
+        public float AuthoritativeYRotation =>
+            IsSpawned ? authoritativeState.Value.YRotation : transform.eulerAngles.y;
 
         /// <summary>
         /// Movement category of the server's authoritative copy, classified from
