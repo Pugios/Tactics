@@ -121,6 +121,18 @@ namespace Tactics.Player
         /// </summary>
         public Vector3 AuthoritativePosition => IsSpawned ? authoritativeState.Value.Position : transform.position;
 
+        /// <summary>
+        /// Drop from the player's origin to the soles. The CharacterController is
+        /// centred on the transform, so the origin sits at the waist, not the
+        /// feet — see <see cref="PlayerGeometry"/>.
+        /// </summary>
+        public float FeetToOrigin => characterController != null
+            ? PlayerGeometry.FeetToOrigin(characterController.height, characterController.center.y)
+            : PlayerGeometry.DefaultFeetToOrigin;
+
+        /// <summary>Where this player is actually standing.</summary>
+        public Vector3 FeetPosition => transform.position - Vector3.up * FeetToOrigin;
+
         /// <summary>Whether the server's authoritative copy of this player is airborne right now.</summary>
         public bool AuthoritativeGrounded => IsSpawned ? authoritativeState.Value.Grounded : true;
 

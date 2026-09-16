@@ -6,6 +6,9 @@ using Tactics.Weapons;
 
 namespace Tactics.Objectives
 {
+    /// <summary>Which timed spike interaction is running, if any.</summary>
+    public enum SpikeInteraction { None, Planting, Defusing }
+
     [RequireComponent(typeof(WeaponInventory))]
     public class SpikeController : NetworkBehaviour
     {
@@ -14,16 +17,42 @@ namespace Tactics.Objectives
         [SerializeField] private float defuseTime = 7f;
         [SerializeField] private GameObject spikePrefab;
 
+        /// <summary>How close the defuser has to stand to the planted spike.</summary>
+        private const float DefuseRange = 3f;
+
         private InputAction interactAction;
         private WeaponInventory inventory;
+        private Tactics.Player.PlayerMovementNetwork movement;
+        private Tactics.Player.PlayerController playerController;
         private float interactTimer;
         private Spike currentSpike;
-        private SpikeSite currentSite;
+
+        /// <summary>
+        /// What holding Interact is currently achieving, if anything. Owner-local
+        /// and purely for feedback: the HUD shows it on the same action bar a
+        /// reload or a weapon draw uses.
+        /// </summary>
+        public SpikeInteraction Interaction { get; private set; }
+
+        /// <summary>0..1 progress of the running plant/defuse; 1 when idle.</summary>
+        public float InteractProgress01
+        {
+            get
+            {
+                float duration = Interaction == SpikeInteraction.Planting ? plantTime
+                    : Interaction == SpikeInteraction.Defusing ? defuseTime
+                    : 0f;
+                if (duration <= 0f) return 1f;
+                return Mathf.Clamp01(interactTimer / duration);
+            }
+        }
 
         private void Start()
         {
             interactAction = InputSystem.actions.FindAction("Interact");
             inventory = GetComponent<WeaponInventory>();
+            movement = GetComponent<Tactics.Player.PlayerMovementNetwork>();
+            playerController = GetComponent<Tactics.Player.PlayerController>();
         }
 
         public override void OnNetworkSpawn()
@@ -39,36 +68,72 @@ namespace Tactics.Objectives
             }
             else
             {
-                interactTimer = 0;
+                CancelInteraction();
             }
+
+            // Pushed every frame rather than on change, so the lock can never be
+            // left set by an interaction that ended some other way.
+            if (playerController != null)
+            {
+                playerController.SetInteractionLock(Interaction != SpikeInteraction.None);
+            }
+        }
+
+        private void OnDisable()
+        {
+            // Death, despawn, or losing ownership must not leave the player frozen.
+            if (playerController != null) playerController.SetInteractionLock(false);
+        }
+
+        /// <summary>
+        /// Anything that stops the action — releasing Interact, stepping off the
+        /// site, walking out of defuse range, the round ending — drops the
+        /// progress. A plant resumed from where it was interrupted would be both
+        /// wrong and impossible to show honestly on the bar.
+        /// </summary>
+        private void CancelInteraction()
+        {
+            interactTimer = 0f;
+            Interaction = SpikeInteraction.None;
         }
 
         private void HandleInteraction()
         {
-            if (GameManager.Instance.GetCurrentState() != GameState.RoundActive) return;
-
-            // Check for plant
-            if (currentSite != null && currentSite.IsPlayerInSite() && currentSpike == null &&
-                inventory != null && inventory.HasSpike)
+            if (GameManager.Instance.GetCurrentState() != GameState.RoundActive)
             {
+                CancelInteraction();
+                return;
+            }
+
+            // Check for plant. The site is the floor itself: the face under
+            // the player must be a plant-site surface, which the map importer
+            // assigns from the Blender material painted on it.
+            if (currentSpike == null && inventory != null && inventory.HasSpike &&
+                PlantSiteQuery.IsOnPlantSite(movement != null ? movement.FeetPosition : transform.position))
+            {
+                Interaction = SpikeInteraction.Planting;
                 interactTimer += Time.deltaTime;
                 if (interactTimer >= plantTime)
                 {
                     PlantSpike();
                 }
             }
-            // Check for defuse
-            else if (currentSpike != null && !currentSpike.IsDefused() && !currentSpike.IsExploded())
+            // Check for defuse. Range is part of the condition rather than a nested
+            // check so that stepping away cancels instead of freezing the timer.
+            else if (currentSpike != null && !currentSpike.IsDefused() && !currentSpike.IsExploded()
+                && Vector3.Distance(transform.position, currentSpike.transform.position) < DefuseRange)
             {
-                float dist = Vector3.Distance(transform.position, currentSpike.transform.position);
-                if (dist < 3f) // Interaction range
+                Interaction = SpikeInteraction.Defusing;
+                interactTimer += Time.deltaTime;
+                if (interactTimer >= defuseTime)
                 {
-                    interactTimer += Time.deltaTime;
-                    if (interactTimer >= defuseTime)
-                    {
-                        currentSpike.Defuse();
-                    }
+                    currentSpike.Defuse();
+                    CancelInteraction();
                 }
+            }
+            else
+            {
+                CancelInteraction();
             }
         }
 
@@ -77,7 +142,7 @@ namespace Tactics.Objectives
             if (inventory == null || !inventory.ConsumeSpike()) return;
 
             PlantSpikeServerRpc();
-            interactTimer = 0;
+            CancelInteraction();
         }
 
         [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Owner)]
@@ -97,18 +162,13 @@ namespace Tactics.Objectives
 
         private void OnTriggerEnter(Collider other)
         {
-            var site = other.GetComponent<SpikeSite>();
-            if (site != null) currentSite = site;
-
             var spike = other.GetComponent<Spike>();
             if (spike != null) currentSpike = spike;
         }
 
         private void OnTriggerExit(Collider other)
         {
-            if (currentSite != null && other.gameObject == currentSite.gameObject) currentSite = null;
-            // We don't clear currentSpike on exit so we can still defuse if we are close? 
-            // Actually, trigger is better for proximity.
+            // Only the spike uses a proximity trigger now; planting reads the floor.
             if (currentSpike != null && other.gameObject == currentSpike.gameObject) currentSpike = null;
         }
     }

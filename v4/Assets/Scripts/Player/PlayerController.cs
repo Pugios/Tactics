@@ -26,6 +26,17 @@ namespace Tactics.Player
         private bool jumpQueued;
 
         public Vector2 MoveInput => moveInput;
+
+        /// <summary>
+        /// True while a timed interaction owns the player — planting or defusing
+        /// the spike. They cannot move, jump or fire until it finishes or is
+        /// cancelled. Abilities should check this too once they exist.
+        /// Pushed every frame by SpikeController; the player itself holds the
+        /// flag so nothing in Player or Weapons has to know about Objectives.
+        /// </summary>
+        public bool IsInteractionLocked { get; private set; }
+
+        public void SetInteractionLock(bool locked) => IsInteractionLocked = locked;
         public bool IsWalking => isWalking;
         public bool IsCrouching => isCrouching;
 
@@ -251,6 +262,17 @@ namespace Tactics.Player
             isCrouching = crouchAction.IsPressed();
             SampleAdsInput();
             if (jumpAction != null && jumpAction.WasPressedThisFrame()) jumpQueued = true;
+
+            if (!IsInteractionLocked) return;
+
+            // Planting/defusing: drop locomotion HERE rather than in the movement
+            // sim, so the input the server replays is the same standstill the
+            // owner predicted. Zeroing it later would leave the two disagreeing
+            // and reconciliation would fight the lock every tick. Stance (crouch,
+            // ADS) is left alone: it moves nobody.
+            moveInput = Vector2.zero;
+            isWalking = false;
+            jumpQueued = false;
         }
     }
 }

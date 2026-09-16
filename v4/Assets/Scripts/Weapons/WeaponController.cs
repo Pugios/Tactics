@@ -23,9 +23,10 @@ namespace Tactics.Weapons
         [SerializeField] private Transform shootPoint;
         [SerializeField] private WeaponData[] weaponRegistry;
 
-        // Only used if the PlayerController is somehow missing; the real values
-        // live there next to the vision origin's, so the two can't drift.
-        private const float FallbackEyeHeight = 1.9f;
+        // Only used if the PlayerController is somehow missing; the real value
+        // lives there next to the vision origin's, so the two can't drift. It is
+        // measured from the feet, like every body height in the project.
+        private const float FallbackEyeHeight = 1.5f;
         private const float FireRateLeniency = 0.85f; // server cadence check tolerates network jitter
         private const float MaxRewindSeconds = 1f; // lag-comp favor-the-shooter cap
 
@@ -192,6 +193,9 @@ namespace Tactics.Weapons
         {
             if (isReloading) return;
             if (inventory.IsEquipping) return; // no firing or reloading during the draw
+            // Planting/defusing owns the player: no reloading either, and the
+            // fire paths below are skipped with it.
+            if (playerController != null && playerController.IsInteractionLocked) return;
 
             var currentWeapon = CurrentWeapon;
 
@@ -247,6 +251,9 @@ namespace Tactics.Weapons
             var currentWeapon = CurrentWeapon;
             if (currentWeapon == null) return;
             if (inventory.IsEquipping) return;
+            // Planting or defusing owns the player; both hands are busy. Melee
+            // swings route through Shoot() as well, so this covers them too.
+            if (playerController != null && playerController.IsInteractionLocked) return;
 
             // IsAiming is already gated on the active weapon having an ADS alt-fire.
             bool ads = playerController != null && playerController.IsAiming;
@@ -405,9 +412,15 @@ namespace Tactics.Weapons
             // zeroes y and works off the horizontal distance.
             bool crouched = movementNetwork != null && movementNetwork.AuthoritativeIsCrouching;
             Vector3 startPoint = movementNetwork != null ? movementNetwork.AuthoritativePosition : transform.position;
-            startPoint.y += playerController != null
+            // eyeHeight is measured from the FEET while startPoint is the origin
+            // (the waist), so the drop between them has to come off it.
+            float eyeAboveFeet = playerController != null
                 ? playerController.EyeHeightFor(crouched)
                 : FallbackEyeHeight;
+            float feetToOrigin = movementNetwork != null
+                ? movementNetwork.FeetToOrigin
+                : Tactics.Player.PlayerGeometry.DefaultFeetToOrigin;
+            startPoint.y += eyeAboveFeet - feetToOrigin;
 
             // Inaccuracy: the client sends the point under its cursor untouched;
             // the server displaces it by the spray's recoil + spread, judging
@@ -859,11 +872,16 @@ namespace Tactics.Weapons
 
                 // Both distances measured from startPoint along the shot.
                 float exitDistance = -1f;
+                RaycastHit exitHit = default;
                 foreach (var exit in exits)
                 {
                     if (exit.collider != entry.collider) continue;
                     float candidate = distance - exit.distance;
-                    if (candidate > entry.distance && candidate > exitDistance) exitDistance = candidate;
+                    if (candidate > entry.distance && candidate > exitDistance)
+                    {
+                        exitDistance = candidate;
+                        exitHit = exit;
+                    }
                 }
 
                 // No exit before the target: the bullet ends inside this wall.
@@ -873,12 +891,22 @@ namespace Tactics.Weapons
                     return null;
                 }
 
+                // Surfaces are per face, so the wall a bullet crosses can be
+                // concrete going in and wood coming out. The tougher of the two
+                // faces governs, the same rule mixed segments already follow.
                 float budget = WallPenetration.DefaultMaxTravelMeters;
                 string surface = "Default";
-                if (entry.collider.TryGetComponent(out Tactics.Map.WallSurface wallSurface))
+                if (entry.collider.TryGetComponent(out Tactics.Map.SurfaceMap surfaces))
                 {
-                    budget = wallSurface.MaxTravelMeters(WallPenetration.DefaultMaxTravelMeters);
-                    surface = wallSurface.SurfaceName;
+                    budget = surfaces.MaxTravelMeters(entry.triangleIndex, budget);
+                    surface = surfaces.SurfaceName(entry.triangleIndex);
+
+                    float exitBudget = surfaces.MaxTravelMeters(exitHit.triangleIndex, budget);
+                    if (exitBudget < budget)
+                    {
+                        budget = exitBudget;
+                        surface = surfaces.SurfaceName(exitHit.triangleIndex);
+                    }
                 }
                 if (budget < tightestBudget)
                 {

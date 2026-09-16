@@ -1,6 +1,7 @@
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.UIElements;
+using Tactics.Objectives;
 using Tactics.Weapons;
 
 namespace Tactics.UI
@@ -12,6 +13,7 @@ namespace Tactics.UI
         private Label reserveAmmoLabel;
         private WeaponController weaponController;
         private WeaponInventory weaponInventory;
+        private SpikeController spikeController;
 
         private VisualElement slotPrimary;
         private VisualElement slotSidearm;
@@ -34,6 +36,8 @@ namespace Tactics.UI
 
         private const string ActionBarVisibleClass = "action-bar--visible";
         private const string ReloadingText = "Reloading...";
+        private const string PlantingText = "Planting...";
+        private const string DefusingText = "Defusing...";
 
         private void OnEnable()
         {
@@ -62,7 +66,7 @@ namespace Tactics.UI
 
         private void Update()
         {
-            if (weaponController == null || weaponInventory == null)
+            if (weaponController == null || weaponInventory == null || spikeController == null)
             {
                 FindWeaponController();
             }
@@ -71,9 +75,11 @@ namespace Tactics.UI
         }
 
         /// <summary>
-        /// Polls equip/reload progress each frame. Reload and equip are already
-        /// mutually exclusive (equip blocks reload start, reload blocks slot
-        /// switching), so the priority here is only a safety order.
+        /// Polls plant/defuse/equip/reload progress each frame. Reload and equip are
+        /// already mutually exclusive (equip blocks reload start, reload blocks slot
+        /// switching), so between those the priority is only a safety order. Planting
+        /// and defusing genuinely can overlap a reload — nothing stops you holding
+        /// Interact mid-reload — and they win, being the round-deciding action.
         /// </summary>
         private void UpdateActionBar()
         {
@@ -82,7 +88,12 @@ namespace Tactics.UI
             string text = null;
             float progress = 0f;
 
-            if (weaponController != null && weaponController.IsReloading)
+            if (spikeController != null && spikeController.Interaction != SpikeInteraction.None)
+            {
+                text = spikeController.Interaction == SpikeInteraction.Planting ? PlantingText : DefusingText;
+                progress = spikeController.InteractProgress01;
+            }
+            else if (weaponController != null && weaponController.IsReloading)
             {
                 text = ReloadingText;
                 progress = weaponController.ReloadProgress01;
@@ -133,6 +144,13 @@ namespace Tactics.UI
                     weaponController.OnAmmoChanged += UpdateAmmoDisplay;
                     UpdateAmmoDisplay();
                 }
+            }
+
+            if (spikeController == null)
+            {
+                // No events to hook: plant/defuse progress is polled like the
+                // reload, and only ever runs on the local player.
+                spikeController = player.GetComponent<SpikeController>();
             }
 
             if (weaponInventory == null)

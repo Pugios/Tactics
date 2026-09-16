@@ -28,6 +28,7 @@ namespace Tactics.Weapons
         private readonly SlotState melee = new SlotState();
 
         private WeaponController weaponController;
+        private Tactics.Player.PlayerController playerController;
         private InputAction slot1Action;
         private InputAction slot2Action;
         private InputAction slot3Action;
@@ -66,6 +67,7 @@ namespace Tactics.Weapons
         private void Awake()
         {
             weaponController = GetComponent<WeaponController>();
+            playerController = GetComponent<Tactics.Player.PlayerController>();
             health = GetComponent<Health>();
         }
 
@@ -102,6 +104,10 @@ namespace Tactics.Weapons
         private void Update()
         {
             if (weaponController != null && weaponController.IsReloading) return;
+            // Planting/defusing holds both hands: no swapping slots, the spike
+            // slot included. Guarded at the input rather than inside SwitchTo so
+            // scripted equips (buy menu, spike fallback) are unaffected.
+            if (playerController != null && playerController.IsInteractionLocked) return;
 
             if (slot1Action != null && slot1Action.WasPressedThisFrame()) SwitchTo(EquipSlot.Primary);
             else if (slot2Action != null && slot2Action.WasPressedThisFrame()) SwitchTo(EquipSlot.Sidearm);

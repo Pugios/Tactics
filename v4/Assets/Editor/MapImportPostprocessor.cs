@@ -2,210 +2,271 @@ using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 using Tactics.Map;
-using Tactics.Objectives;
+using Tactics.Vision;
 
 namespace Tactics.EditorTools
 {
     /// <summary>
-    /// Takes over the whole hand-run checklist that used to follow every map
-    /// re-export from Blender: colliders, layers, materials, the plant-area
-    /// trigger volumes, and the penetration surface each wall is made of.
-    /// Re-importing the FBX is now the entire workflow.
+    /// Turns a map exported from Blender into playable geometry on every
+    /// (re-)import, so dropping the FBX into <see cref="MapFolder"/> is the whole
+    /// workflow. Nothing is driven by object names: **the Blender material on a
+    /// face decides everything about it**, resolved against the
+    /// <see cref="SurfaceData"/> assets by name.
     ///
-    /// Everything is driven by the Blender object name, because that is the one
-    /// piece of authoring that survives the round trip intact — Blender materials
-    /// are replaced by Unity ones as part of this very process, so they cannot
-    /// carry the signal.
+    /// One Blender object stays one object, and its ground/wall split — which the
+    /// game consumes through layers (aim raycasts see only Ground, penetration
+    /// and melee only Wall) — is computed from face normals
+    /// (<see cref="SurfaceClassifier"/>) rather than hand-cut in Blender:
     ///
-    ///   Wall_*                    Wall layer,   Walls.mat,     WallSurface
-    ///   Prop_*                    Wall layer,   Walls.mat,     WallSurface
-    ///   Ground_*SitePlantArea     Ground layer, PlantArea.mat
-    ///   Ground_*                  Ground layer, Ground.mat
-    ///   Trigger_*                 convex trigger MeshCollider, no renderer, SpikeSite
+    ///   Visual object       MeshRenderer + materials, no collider, Default layer
+    ///   ├─ GroundCollider   faces within 45° of up (walkable ramps included)   Ground (7)
+    ///   └─ WallCollider     everything else, ceilings and undersides included  Wall (6)
     ///
-    /// A prop's walkable top face is a separate piece named Ground_*, not Prop_*,
-    /// so it keeps landing on the Ground layer and stays aimable — the split the
-    /// vision system relies on.
+    /// Both colliders carry a <see cref="SurfaceMap"/> recording the surface of
+    /// every triangle, because materials are per face: one object can be a
+    /// concrete building with a dirt floor on top.
     ///
-    /// The pass is self-gating: a model containing none of these prefixes is left
-    /// completely alone, so Spike.fbx and the other non-map models are untouched
-    /// without needing a path allowlist.
+    /// A material with no matching asset is not an error. Its faces are still
+    /// split onto the right layers, and take the Ground surface when they point
+    /// up and Wall otherwise, so only the surfaces you care about need assets.
+    ///
+    /// The look is never touched: every face keeps the material Blender gave it.
     /// </summary>
     public class MapImportPostprocessor : AssetPostprocessor
     {
-        private const string WallPrefix = "Wall_";
-        private const string PropPrefix = "Prop_";
-        private const string GroundPrefix = "Ground_";
-        private const string TriggerPrefix = "Trigger_";
-        private const string PlantAreaSuffix = "SitePlantArea";
+        /// <summary>
+        /// Only models under this folder are maps. Gating by folder leaves names
+        /// completely free, never touches Spike.fbx and friends, and — unlike an
+        /// asset label kept in the .meta — survives deleting and re-adding the FBX.
+        /// </summary>
+        public const string MapFolder = "Assets/Models/Maps/";
 
-        private const string WallMaterialPath = "Assets/Materials/Walls.mat";
-        private const string GroundMaterialPath = "Assets/Materials/Ground.mat";
-        private const string PlantSiteMaterialPath = "Assets/Materials/PlantArea.mat";
+        public const string GroundColliderName = "GroundCollider";
+        public const string WallColliderName = "WallCollider";
+
+        private bool IsMap => assetPath.Replace('\\', '/').StartsWith(MapFolder, System.StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Part of every model's import dependency hash. Bump it whenever what this
+        /// pass produces changes: Unity then re-imports the maps by itself, instead
+        /// of keeping stale cached results and flagging the next manual reimport as
+        /// an "inconsistent result".
+        /// </summary>
+        public override uint GetVersion() => 6;
+
+        private void OnPreprocessModel()
+        {
+            if (!IsMap) return;
+
+            // The importer's own "Generate Colliders" would put a whole-mesh
+            // collider on every visual object, on top of the split ones.
+            var importer = (ModelImporter)assetImporter;
+            importer.addCollider = false;
+        }
 
         private void OnPostprocessModel(GameObject root)
         {
-            var meshes = new List<MeshFilter>(root.GetComponentsInChildren<MeshFilter>(true));
-            if (!LooksLikeMap(meshes)) return;
+            if (!IsMap) return;
 
-            Material wallMaterial = LoadMaterial(WallMaterialPath);
-            Material groundMaterial = LoadMaterial(GroundMaterialPath);
-            Material plantSiteMaterial = LoadMaterial(PlantSiteMaterialPath);
-            List<WallSurfaceData> surfaces = LoadSurfaces();
+            List<SurfaceData> surfaces = LoadSurfaces();
+            var surfaceNames = new List<string>(surfaces.Count);
+            foreach (SurfaceData surface in surfaces) surfaceNames.Add(surface.name);
 
-            int walls = 0, grounds = 0, triggers = 0;
+            // A face whose material names no surface gets no surface at all. It is
+            // still split onto the right layer; it simply has no penetration
+            // budget of its own and cannot be a plant site.
+            const int noSurface = -1;
 
-            foreach (MeshFilter meshFilter in meshes)
+            var unknownMaterials = new SortedSet<string>();
+            int objects = 0, groundColliders = 0, wallColliders = 0, rebuiltMeshes = 0;
+            var used = new SortedSet<string>();
+
+            foreach (MeshFilter filter in root.GetComponentsInChildren<MeshFilter>(true))
             {
-                GameObject go = meshFilter.gameObject;
-                string name = go.name;
+                if (filter.sharedMesh == null) continue;
+                objects++;
 
-                if (StartsWith(name, TriggerPrefix))
+                if (ConfigureObject(root, filter, surfaces, surfaceNames, noSurface, noSurface,
+                        unknownMaterials, used, out bool hasGround, out bool hasWall, out bool rebuilt))
                 {
-                    ConfigureTrigger(go, meshFilter);
-                    triggers++;
-                }
-                else if (StartsWith(name, WallPrefix) || StartsWith(name, PropPrefix))
-                {
-                    go.layer = Tactics.Vision.VisionLayerMasks.Wall;
-                    AddMeshCollider(go, meshFilter, convex: false, isTrigger: false);
-                    ApplyMaterial(go, wallMaterial);
-                    ApplySurface(go, name, surfaces);
-                    walls++;
-                }
-                else if (StartsWith(name, GroundPrefix))
-                {
-                    go.layer = Tactics.Vision.VisionLayerMasks.Ground;
-                    AddMeshCollider(go, meshFilter, convex: false, isTrigger: false);
-                    ApplyMaterial(go, EndsWith(name, PlantAreaSuffix) ? plantSiteMaterial : groundMaterial);
-                    grounds++;
+                    if (hasGround) groundColliders++;
+                    if (hasWall) wallColliders++;
+                    if (rebuilt) rebuiltMeshes++;
                 }
             }
 
-            Debug.Log($"[MapImport] {root.name}: {walls} wall/prop, {grounds} ground, {triggers} trigger objects configured.");
+            Debug.Log($"[MapImport] {root.name}: {objects} objects → {groundColliders} ground + {wallColliders} wall colliders, "
+                + $"{rebuiltMeshes} meshes rebuilt. Surfaces used: {string.Join(", ", used)}.");
+
+            if (unknownMaterials.Count > 0)
+            {
+                Debug.LogWarning($"[MapImport] {root.name}: no SurfaceData asset for Blender material(s) "
+                    + $"{string.Join(", ", unknownMaterials)} — those faces get no surface (they are still split onto the right layers).");
+            }
         }
 
-        private static bool LooksLikeMap(List<MeshFilter> meshes)
+        private bool ConfigureObject(GameObject root, MeshFilter filter, List<SurfaceData> surfaces,
+            List<string> surfaceNames, int groundFallback, int wallFallback,
+            SortedSet<string> unknownMaterials, SortedSet<string> used,
+            out bool hasGround, out bool hasWall, out bool rebuilt)
         {
-            foreach (MeshFilter meshFilter in meshes)
+            hasGround = hasWall = rebuilt = false;
+
+            GameObject go = filter.gameObject;
+            Mesh source = filter.sharedMesh;
+            var renderer = go.GetComponent<MeshRenderer>();
+
+            MeshCollider existing = go.GetComponent<MeshCollider>();
+            if (existing != null) Object.DestroyImmediate(existing);
+
+            // No collider here any more, so this layer only decides camera
+            // culling — and every camera, the vision eye camera included, draws Default.
+            go.layer = VisionLayerMasks.Default;
+
+            // Unity imports one submesh per Blender material slot, and the slot's
+            // material still carries the Blender material's name at this point.
+            int subMeshCount = source.subMeshCount;
+            var submeshTriangles = new int[subMeshCount][];
+            var submeshSurface = new int[subMeshCount];
+            Material[] slotMaterials = renderer != null ? renderer.sharedMaterials : new Material[0];
+
+            for (int s = 0; s < subMeshCount; s++)
             {
-                string name = meshFilter.gameObject.name;
-                if (StartsWith(name, WallPrefix) || StartsWith(name, PropPrefix)
-                    || StartsWith(name, GroundPrefix) || StartsWith(name, TriggerPrefix))
-                {
-                    return true;
-                }
+                submeshTriangles[s] = source.GetTopology(s) == MeshTopology.Triangles
+                    ? source.GetTriangles(s)
+                    : new int[0];
+
+                string materialName = s < slotMaterials.Length && slotMaterials[s] != null ? slotMaterials[s].name : null;
+                submeshSurface[s] = MapSurfaceSplitter.MatchSurface(materialName, surfaceNames);
+                if (submeshSurface[s] < 0 && !string.IsNullOrEmpty(materialName)) unknownMaterials.Add(materialName);
             }
-            return false;
+
+            Matrix4x4 meshToRoot = root.transform.worldToLocalMatrix * go.transform.localToWorldMatrix;
+            MapSurfaceSplitter.Result split = MapSurfaceSplitter.Split(source.vertices, submeshTriangles,
+                submeshSurface, groundFallback, wallFallback, meshToRoot);
+
+            foreach (int index in split.RenderSurfaces)
+            {
+                if (index >= 0 && index < surfaces.Count) used.Add(surfaces[index].name);
+            }
+
+            string path = HierarchyPath(root.transform, go.transform);
+            ApplyVisual(filter, renderer, source, slotMaterials, split, path, ref rebuilt);
+
+            Vector3[] vertices = source.vertices;
+            hasGround = AddColliderChild(go, vertices, split.GroundTriangles, split.GroundTags, surfaces,
+                GroundColliderName, VisionLayerMasks.Ground, path);
+            hasWall = AddColliderChild(go, vertices, split.WallTriangles, split.WallTags, surfaces,
+                WallColliderName, VisionLayerMasks.Wall, path);
+            return true;
         }
 
         /// <summary>
-        /// The plant volume needs real vertical volume to overlap a standing
-        /// CharacterController, which is why it is modelled as its own solid mesh
-        /// in Blender rather than reusing the flat footprint: a zero-thickness
-        /// mesh's convex hull is itself degenerate and OnTriggerEnter fires
-        /// unreliably against it.
+        /// Leaves the look entirely to Blender. Nothing is assigned unless the
+        /// mesh has to be rebuilt — when an unpainted submesh splits into floor
+        /// and wall, or when a slot is empty — and even then the renderer just
+        /// gets the same slot materials re-ordered to match the new submeshes.
         /// </summary>
-        private static void ConfigureTrigger(GameObject go, MeshFilter meshFilter)
+        private void ApplyVisual(MeshFilter filter, MeshRenderer renderer, Mesh source, Material[] slotMaterials,
+            MapSurfaceSplitter.Result split, string path, ref bool rebuilt)
         {
-            AddMeshCollider(go, meshFilter, convex: true, isTrigger: true);
+            // Untouched mesh, untouched materials.
+            if (split.RenderMatchesSource || split.RenderSurfaces.Count == 0) return;
 
-            MeshRenderer renderer = go.GetComponent<MeshRenderer>();
-            if (renderer != null) Object.DestroyImmediate(renderer);
+            {
+                // Instantiate keeps every vertex attribute (normals, UVs, tangents,
+                // colors); only the index buffers are regrouped.
+                Mesh visual = Object.Instantiate(source);
+                visual.name = source.name;
+                visual.subMeshCount = split.RenderTriangles.Count;
+                for (int i = 0; i < split.RenderTriangles.Count; i++)
+                {
+                    visual.SetTriangles(split.RenderTriangles[i], i, i == split.RenderTriangles.Count - 1);
+                }
 
-            SpikeSite site = go.GetComponent<SpikeSite>();
-            if (site == null) site = go.AddComponent<SpikeSite>();
-            site.siteName = LastToken(go.name);
-        }
+                context.AddObjectToAsset($"{path}/Visual", visual);
+                filter.sharedMesh = visual;
+                rebuilt = true;
+            }
 
-        private static void AddMeshCollider(GameObject go, MeshFilter meshFilter, bool convex, bool isTrigger)
-        {
-            if (meshFilter.sharedMesh == null) return;
-
-            MeshCollider collider = go.GetComponent<MeshCollider>();
-            if (collider == null) collider = go.AddComponent<MeshCollider>();
-
-            collider.sharedMesh = meshFilter.sharedMesh;
-            // Order matters: a MeshCollider refuses to become a trigger while it
-            // is still non-convex.
-            collider.convex = convex;
-            collider.isTrigger = isTrigger;
-        }
-
-        private static void ApplyMaterial(GameObject go, Material material)
-        {
-            if (material == null) return;
-
-            MeshRenderer renderer = go.GetComponent<MeshRenderer>();
             if (renderer == null) return;
 
-            // One material across every submesh: the map's look comes from these
-            // few shared Unity materials, not from whatever Blender exported.
-            var materials = new Material[Mathf.Max(1, renderer.sharedMaterials.Length)];
-            for (int i = 0; i < materials.Length; i++) materials[i] = material;
+            // The submeshes moved, so each group takes the material of the slot
+            // its faces came from.
+            var materials = new Material[split.RenderSurfaces.Count];
+            for (int i = 0; i < materials.Length; i++)
+            {
+                int slot = split.RenderSourceSubmesh[i];
+                materials[i] = slot >= 0 && slot < slotMaterials.Length ? slotMaterials[slot] : null;
+            }
             renderer.sharedMaterials = materials;
         }
 
-        /// <summary>
-        /// Scans every underscore-separated token of the name for a known surface,
-        /// so Wall_Stone_01 and Prop_Crate_Wood_03 both resolve and token order is
-        /// free. No match leaves the surface unset, which the runtime reads as the
-        /// default travel budget.
-        /// </summary>
-        private static void ApplySurface(GameObject go, string name, List<WallSurfaceData> surfaces)
+        private bool AddColliderChild(GameObject parent, Vector3[] vertices, List<int> triangles, List<int> tags,
+            List<SurfaceData> surfaces, string childName, int layer, string path)
         {
-            if (surfaces.Count == 0) return;
+            if (triangles.Count == 0) return false;
 
-            WallSurfaceData match = null;
-            string[] tokens = name.Split('_');
-            foreach (string token in tokens)
-            {
-                foreach (WallSurfaceData surface in surfaces)
-                {
-                    if (string.Equals(token, surface.ResolvedName, System.StringComparison.OrdinalIgnoreCase))
-                    {
-                        match = surface;
-                        break;
-                    }
-                }
-                if (match != null) break;
-            }
+            Mesh mesh = SurfaceClassifier.BuildMesh(vertices, triangles, $"{parent.name}_{childName}");
+            // Meshes created during import only persist if they are registered as
+            // part of the imported asset; otherwise the collider comes back empty on
+            // reload. The hierarchy path keeps the identifier stable across re-imports.
+            context.AddObjectToAsset($"{path}/{childName}", mesh);
 
-            if (match == null) return;
+            var child = new GameObject(childName) { layer = layer };
+            child.transform.SetParent(parent.transform, false);
+            child.AddComponent<MeshCollider>().sharedMesh = mesh;
 
-            WallSurface component = go.GetComponent<WallSurface>();
-            if (component == null) component = go.AddComponent<WallSurface>();
-            component.surface = match;
+            AddSurfaceMap(child, tags, surfaces);
+            return true;
         }
 
-        private static List<WallSurfaceData> LoadSurfaces()
+        /// <summary>
+        /// Records the surface of every collider triangle, compacting the palette
+        /// so a single-surface collider stores no per-triangle array at all.
+        /// </summary>
+        private static void AddSurfaceMap(GameObject child, List<int> tags, List<SurfaceData> surfaces)
         {
-            var surfaces = new List<WallSurfaceData>();
-            foreach (string guid in AssetDatabase.FindAssets("t:WallSurfaceData"))
+            var palette = new List<SurfaceData>();
+            var paletteIndex = new Dictionary<int, int>();
+            var perTriangle = new byte[tags.Count];
+
+            for (int i = 0; i < tags.Count; i++)
             {
-                var surface = AssetDatabase.LoadAssetAtPath<WallSurfaceData>(AssetDatabase.GUIDToAssetPath(guid));
+                int surface = tags[i];
+                if (!paletteIndex.TryGetValue(surface, out int local))
+                {
+                    local = palette.Count;
+                    paletteIndex.Add(surface, local);
+                    palette.Add(surface >= 0 && surface < surfaces.Count ? surfaces[surface] : null);
+                }
+                perTriangle[i] = (byte)local;
+            }
+
+            if (palette.Count == 0) return;
+
+            var map = child.AddComponent<SurfaceMap>();
+            map.palette = palette.ToArray();
+            map.triangleSurface = palette.Count > 1 ? perTriangle : new byte[0];
+        }
+
+        private static string HierarchyPath(Transform root, Transform target)
+        {
+            var parts = new List<string>();
+            for (Transform t = target; t != null && t != root; t = t.parent) parts.Add(t.name);
+            parts.Reverse();
+            return string.Join("/", parts);
+        }
+
+        private static List<SurfaceData> LoadSurfaces()
+        {
+            var surfaces = new List<SurfaceData>();
+            foreach (string guid in AssetDatabase.FindAssets("t:SurfaceData"))
+            {
+                var surface = AssetDatabase.LoadAssetAtPath<SurfaceData>(AssetDatabase.GUIDToAssetPath(guid));
                 if (surface != null) surfaces.Add(surface);
             }
             return surfaces;
         }
-
-        private static Material LoadMaterial(string path)
-        {
-            var material = AssetDatabase.LoadAssetAtPath<Material>(path);
-            if (material == null) Debug.LogWarning($"[MapImport] Material not found at {path}; leaving imported materials in place.");
-            return material;
-        }
-
-        private static string LastToken(string name)
-        {
-            int split = name.LastIndexOf('_');
-            return split >= 0 && split < name.Length - 1 ? name.Substring(split + 1) : name;
-        }
-
-        private static bool StartsWith(string name, string prefix) =>
-            name.StartsWith(prefix, System.StringComparison.OrdinalIgnoreCase);
-
-        private static bool EndsWith(string name, string suffix) =>
-            name.EndsWith(suffix, System.StringComparison.OrdinalIgnoreCase);
     }
 }
