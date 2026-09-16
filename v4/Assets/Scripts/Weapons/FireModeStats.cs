@@ -65,6 +65,26 @@ namespace Tactics.Weapons
         }
 
         /// <summary>
+        /// Pellets a pull actually throws with <paramref name="ammoLoaded"/>
+        /// rounds in the magazine. Only a burst alt is clamped, because only
+        /// there is each pellet its own round; a Judge shell carries all of its
+        /// pellets, so its last round fires a full pattern.
+        /// </summary>
+        public static int PelletsForPull(WeaponData weapon, bool altShot, int ammoLoaded)
+        {
+            int pellets = MaxPelletCount(weapon, altShot);
+            return IsShotgunAlt(weapon, altShot) ? Mathf.Clamp(ammoLoaded, 1, pellets) : pellets;
+        }
+
+        /// <summary>
+        /// Rounds a pull of <paramref name="pellets"/> pellets takes from the
+        /// magazine: one per pellet for a burst alt (the Classic's 3 rounds), one
+        /// shell otherwise however many pellets it holds (the Judge's 12).
+        /// </summary>
+        public static int RoundsForPull(WeaponData weapon, bool altShot, int pellets)
+            => IsShotgunAlt(weapon, altShot) ? pellets : 1;
+
+        /// <summary>
         /// How this mode's pattern grows with range — see
         /// <see cref="WeaponData.spreadDistanceExponent"/>. The Classic's burst
         /// spreads sub-linearly like the Judge while its primary stays a true cone.

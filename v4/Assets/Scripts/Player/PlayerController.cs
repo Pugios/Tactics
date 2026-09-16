@@ -1,6 +1,7 @@
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using Tactics.Core;
 using Tactics.Vision;
 
 namespace Tactics.Player
@@ -37,6 +38,20 @@ namespace Tactics.Player
         public bool IsInteractionLocked { get; private set; }
 
         public void SetInteractionLock(bool locked) => IsInteractionLocked = locked;
+
+        /// <summary>
+        /// True while the player may not act — no firing, reloading, slot
+        /// switching or zoom cycling: a timed interaction owns them, or a menu
+        /// owns the mouse (clicks on its buttons must not reach the game).
+        /// </summary>
+        public bool IsActionBlocked => IsInteractionLocked || MenuState.IsOpen;
+
+        /// <summary>
+        /// True while locomotion input is dropped at the source: planting or
+        /// defusing, or a menu that freezes the player (the Esc menu).
+        /// </summary>
+        public bool IsMovementLocked => IsInteractionLocked || MenuState.FreezesPlayer;
+
         public bool IsWalking => isWalking;
         public bool IsCrouching => isCrouching;
 
@@ -114,7 +129,9 @@ namespace Tactics.Player
 
         private void Update()
         {
-            HandleCenterCamera();
+            // CenterCamera warps the OS cursor, which must never happen to a
+            // pointer that's busy clicking menu buttons.
+            if (!MenuState.IsOpen) HandleCenterCamera();
             HandleRotation();
             SampleInput();
         }
@@ -185,11 +202,30 @@ namespace Tactics.Player
         public Vector3 LookTarget => lookTarget;
         public Vector3 AimGroundPoint => aimGroundPoint;
 
+        // Aim point relative to the player, remembered so an open menu can hold
+        // the aim steady while the cursor wanders over buttons.
+        private Vector3 lastAimOffset;
+        private bool hasAimOffset;
+
         private void HandleRotation()
         {
-            Ray ray = mainCamera.ScreenPointToRay(Mouse.current.position.ReadValue());
-            if (!TryGetMouseGroundPoint(ray, out Vector3 groundPoint))
-                return;
+            Vector3 groundPoint;
+            if (MenuState.IsOpen)
+            {
+                // The cursor is pointing at the menu, not the world: keep facing
+                // and looking where the player was — relative to themselves, so
+                // walking with the buy menu open doesn't swing the view around.
+                if (!hasAimOffset) return;
+                groundPoint = transform.position + lastAimOffset;
+            }
+            else
+            {
+                Ray ray = mainCamera.ScreenPointToRay(Mouse.current.position.ReadValue());
+                if (!TryGetMouseGroundPoint(ray, out groundPoint))
+                    return;
+                lastAimOffset = groundPoint - transform.position;
+                hasAimOffset = true;
+            }
 
             float currentEyeHeight = isCrouching ? crouchEyeHeight : eyeHeight;
 
@@ -241,15 +277,19 @@ namespace Tactics.Player
             var weapon = weaponInventory != null ? weaponInventory.GetActiveWeaponData() : null;
             int levelCount = Tactics.Weapons.AdsZoomLogic.LevelCount(weapon);
 
+            // A right click on a menu is not a scope press. A held zoom drops
+            // (the button no longer counts as held); a toggled one stays put.
+            bool menuOpen = MenuState.IsOpen;
+
             if (levelCount == 0 || altFireAction == null)
             {
                 adsZoomLevel = 0;
             }
             else if (weapon.adsMode == Tactics.Weapons.AdsMode.Hold)
             {
-                adsZoomLevel = altFireAction.IsPressed() ? 1 : 0;
+                adsZoomLevel = !menuOpen && altFireAction.IsPressed() ? 1 : 0;
             }
-            else if (altFireAction.WasPressedThisFrame() && !weaponInventory.IsEquipping)
+            else if (!menuOpen && altFireAction.WasPressedThisFrame() && !weaponInventory.IsEquipping)
             {
                 adsZoomLevel = Tactics.Weapons.AdsZoomLogic.NextToggleLevel(adsZoomLevel, levelCount);
             }
@@ -263,13 +303,13 @@ namespace Tactics.Player
             SampleAdsInput();
             if (jumpAction != null && jumpAction.WasPressedThisFrame()) jumpQueued = true;
 
-            if (!IsInteractionLocked) return;
+            if (!IsMovementLocked) return;
 
-            // Planting/defusing: drop locomotion HERE rather than in the movement
-            // sim, so the input the server replays is the same standstill the
-            // owner predicted. Zeroing it later would leave the two disagreeing
-            // and reconciliation would fight the lock every tick. Stance (crouch,
-            // ADS) is left alone: it moves nobody.
+            // Planting/defusing or the Esc menu: drop locomotion HERE rather than
+            // in the movement sim, so the input the server replays is the same
+            // standstill the owner predicted. Zeroing it later would leave the two
+            // disagreeing and reconciliation would fight the lock every tick.
+            // Stance (crouch, ADS) is left alone: it moves nobody.
             moveInput = Vector2.zero;
             isWalking = false;
             jumpQueued = false;

@@ -62,7 +62,8 @@ namespace Tactics.Objectives
 
         private void Update()
         {
-            if (interactAction.IsPressed())
+            // Opening a menu mid-plant cancels it like releasing Interact would.
+            if (interactAction.IsPressed() && !MenuState.IsOpen)
             {
                 HandleInteraction();
             }

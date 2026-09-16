@@ -583,6 +583,32 @@ namespace Tactics.Tests.EditMode
         }
 
         [Test]
+        public void JudgeShell_CostsOneRound_AndAlwaysThrowsEveryPellet()
+        {
+            WeaponData judge = MakeJudge();
+
+            // A full magazine, and the very last round: all 12 pellets either way.
+            Assert.AreEqual(PelletCount, FireModeStats.PelletsForPull(judge, false, 7));
+            Assert.AreEqual(PelletCount, FireModeStats.PelletsForPull(judge, false, 1));
+            Assert.AreEqual(1, FireModeStats.RoundsForPull(judge, false, PelletCount));
+        }
+
+        [Test]
+        public void ClassicBurst_CostsOneRoundPerPellet_AndClampsToTheMagazine()
+        {
+            WeaponData classic = MakeClassic();
+
+            Assert.AreEqual(ClassicAltPellets, FireModeStats.PelletsForPull(classic, true, 12));
+            Assert.AreEqual(2, FireModeStats.PelletsForPull(classic, true, 2));
+            Assert.AreEqual(ClassicAltPellets, FireModeStats.RoundsForPull(classic, true, ClassicAltPellets));
+            Assert.AreEqual(2, FireModeStats.RoundsForPull(classic, true, 2));
+
+            // Its primary is an ordinary single round.
+            Assert.AreEqual(1, FireModeStats.PelletsForPull(classic, false, 12));
+            Assert.AreEqual(1, FireModeStats.RoundsForPull(classic, false, 1));
+        }
+
+        [Test]
         public void MaxPelletCount_AltVsPrimary()
         {
             WeaponData classic = MakeClassic();

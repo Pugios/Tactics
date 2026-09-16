@@ -2,6 +2,8 @@ using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
+using Tactics.Core;
+using Tactics.Settings;
 using Tactics.Weapons;
 // UIElements has its own Cursor type (element styling); we mean the OS pointer.
 using Cursor = UnityEngine.Cursor;
@@ -9,48 +11,28 @@ using Cursor = UnityEngine.Cursor;
 namespace Tactics.UI
 {
     /// <summary>
-    /// Everything a future settings menu should be able to change about the
-    /// crosshair lives here, so customization is a matter of mutating this
-    /// object — the drawing code reads it live every repaint.
-    /// </summary>
-    [System.Serializable]
-    public class CrosshairSettings
-    {
-        public Color color = Color.white;
-        public Color outlineColor = new Color(0f, 0f, 0f, 0.8f);
-        public float outlineThickness = 1f;
-
-        [Header("Plus (single-bullet weapons)")]
-        public float plusLength = 6f;
-        public float plusThickness = 2f;
-        public float plusGap = 3f;
-
-        [Header("Circle (shotguns)")]
-        public float circleThickness = 2f;
-        public bool showCenterDot = true;
-        public float dotRadius = 1.5f;
-    }
-
-    /// <summary>
-    /// Replaces the OS cursor with a drawn crosshair: a simple "+" for
-    /// single-bullet weapons, and — whenever the CURRENT trigger pull would throw
-    /// more than one pellet, so a shotgun always and the Classic while right click
-    /// is held — a circle whose radius is the pellet footprint at the aim point:
-    /// the same distance·tan(spread) projection the server applies to pellets,
-    /// fed from the owner-local spread mirror, so the circle exactly bounds
-    /// where this shot's pellets can land. Purely cosmetic and owner-local.
+    /// Replaces the OS cursor with a drawn crosshair: a "+" for single-bullet
+    /// weapons, and — whenever the CURRENT trigger pull would throw more than one
+    /// pellet, so a shotgun always and the Classic while right click is held — a
+    /// circle. Both shapes read one radius, the spread footprint at the aim point:
+    /// the same distance·tan(spread) projection the server applies to shots,
+    /// fed from the owner-local spread mirror. The circle is that footprint; the
+    /// "+" arms start at it once it exceeds the resting gap. Either way the inner
+    /// edge bounds where this shot can land. Recoil is deliberately excluded — it
+    /// is a deterministic drift, not uncertainty. Purely cosmetic and owner-local.
+    ///
+    /// The player's <see cref="CrosshairSettings"/> choose which errors show:
+    /// hiding firing error drops spray growth, hiding movement error drops the
+    /// movement penalty. With both hidden the "+" keeps a constant size, while
+    /// the circle still shows the pattern's first-shot footprint — which grows
+    /// with aim distance, because that is simply how big the pattern is there.
     /// </summary>
     // After TopDownCamera (150): the crosshair must see this frame's camera pose
     // and warped cursor position, not last frame's.
     [DefaultExecutionOrder(160)]
     public class CrosshairController : MonoBehaviour
     {
-        /// <summary>Set while a menu needs the OS cursor (buy menu); the
-        /// crosshair hides itself and hands the pointer back.</summary>
-        public static bool MenuOpen;
-
         [SerializeField] private UIDocument uiDocument;
-        [SerializeField] private CrosshairSettings settings = new CrosshairSettings();
 
         private CrosshairElement element;
         private WeaponController weaponController;
@@ -59,7 +41,7 @@ namespace Tactics.UI
 
         private void OnEnable()
         {
-            element = new CrosshairElement(settings);
+            element = new CrosshairElement();
             // Last child of the document root → drawn on top of the HUD.
             uiDocument.rootVisualElement.Add(element);
         }
@@ -75,7 +57,7 @@ namespace Tactics.UI
         {
             if (weaponController == null) FindPlayer();
 
-            bool show = weaponController != null && !MenuOpen && element != null && element.panel != null;
+            bool show = weaponController != null && !MenuState.IsOpen && element != null && element.panel != null;
             Cursor.visible = !show;
             if (element != null) element.visible = show;
             if (!show) return;
@@ -90,19 +72,24 @@ namespace Tactics.UI
             Vector2 panelCenter = RuntimePanelUtils.ScreenToPanel(element.panel,
                 new Vector2(mouseScreen.x, Screen.height - mouseScreen.y));
 
+            CrosshairSettings settings = SettingsService.Current.crosshair;
+            element.Settings = settings;
+
             WeaponData weapon = weaponController.CurrentWeapon;
             bool drawCircle = weapon != null && weaponController.CurrentPelletCount > 1;
+            bool needRadius = weapon != null && (drawCircle || settings.PlusShowsSpread);
             float radiusPanel = 0f;
 
             UnityEngine.Camera cam = UnityEngine.Camera.main;
             // No aim point means Shoot() would refuse to fire there too — fall
-            // back to the plain + rather than a meaningless circle.
-            if (drawCircle && cam != null && weaponController.TryGetAimPoint(out Vector3 aimPoint))
+            // back to the resting + rather than a meaningless footprint.
+            if (needRadius && cam != null && weaponController.TryGetAimPoint(out Vector3 aimPoint))
             {
                 Vector3 toAim = aimPoint - playerTransform.position;
                 toAim.y = 0f;
                 float radiusMeters = SpreadCalculator.ComputeSpreadWorldRadiusMeters(
-                    toAim.magnitude, weaponController.CurrentSpreadDegrees,
+                    toAim.magnitude,
+                    weaponController.GetDisplayedSpreadDegrees(settings.showFiringError, settings.showMovementError),
                     weaponController.CurrentSpreadDistanceExponent);
 
                 // Project the aim point and a point one radius away along any
@@ -137,19 +124,32 @@ namespace Tactics.UI
     }
 
     /// <summary>
-    /// Full-panel overlay that paints the crosshair with Painter2D. Ignores
-    /// picking so it never blocks clicks on menus underneath.
+    /// Overlay that paints the crosshair with Painter2D, filling its parent: the
+    /// whole panel for the in-game crosshair, a small swatch for the settings
+    /// preview. Ignores picking so it never blocks clicks on menus underneath.
     /// </summary>
     public class CrosshairElement : VisualElement
     {
-        private readonly CrosshairSettings settings;
+        private CrosshairSettings settings = new CrosshairSettings();
         private Vector2 center;
         private bool drawCircle;
         private float circleRadius;
+        private float spreadRadius;
 
-        public CrosshairElement(CrosshairSettings settings)
+        /// <summary>Read on every repaint; assigning it repaints.</summary>
+        public CrosshairSettings Settings
         {
-            this.settings = settings;
+            get => settings;
+            set
+            {
+                if (value == null || ReferenceEquals(value, settings)) return;
+                settings = value;
+                MarkDirtyRepaint();
+            }
+        }
+
+        public CrosshairElement()
+        {
             pickingMode = PickingMode.Ignore;
             style.position = Position.Absolute;
             style.left = 0;
@@ -164,6 +164,7 @@ namespace Tactics.UI
             center = panelCenter;
             drawCircle = circle;
             circleRadius = Mathf.Max(radiusPanel, 2f); // stays visible when aiming at your own feet
+            spreadRadius = radiusPanel;
             MarkDirtyRepaint();
         }
 
@@ -196,11 +197,15 @@ namespace Tactics.UI
         }
 
         /// <summary>Four arm rectangles, each grown by <paramref name="expand"/>
-        /// on all sides (the outline pass draws the grown version underneath).</summary>
+        /// on all sides (the outline pass draws the grown version underneath).
+        /// The arms start at the spread footprint once it outgrows the resting
+        /// gap, keeping their length — max, not sum, so a visible inner edge is
+        /// exactly the footprint, like the circle.</summary>
         private void FillPlus(Painter2D painter, Color color, float expand)
         {
-            float gap = Mathf.Max(0f, settings.plusGap - expand);
-            float end = settings.plusGap + settings.plusLength + expand;
+            float innerGap = Mathf.Max(settings.plusGap, spreadRadius);
+            float gap = Mathf.Max(0f, innerGap - expand);
+            float end = innerGap + settings.plusLength + expand;
             float half = settings.plusThickness * 0.5f + expand;
 
             FillRect(painter, color, center.x - end, center.y - half, center.x - gap, center.y + half);  // left

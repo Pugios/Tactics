@@ -58,6 +58,7 @@ namespace Tactics.Camera
         private UnityEngine.Camera cam;
 
         private InputAction zoomAction;
+        private Vector3 lastMouseOffset;
         private float lockedHeight;
         private Coroutine alignCoroutine;
 
@@ -96,8 +97,9 @@ namespace Tactics.Camera
             // point under the cursor via the PRE-move camera.
             Vector3 mouseWorldPos = GetMouseWorldPosition();
 
-            // Handle Zoom via Mouse Wheel (shared height input for both cameras)
-            if (zoomAction != null)
+            // Handle Zoom via Mouse Wheel (shared height input for both cameras).
+            // A wheel over a menu scrolls the menu, not the camera.
+            if (zoomAction != null && !Tactics.Core.MenuState.IsOpen)
             {
                 float scrollValue = zoomAction.ReadValue<Vector2>().y;
                 if (Mathf.Abs(scrollValue) > 0.1f)
@@ -219,7 +221,7 @@ namespace Tactics.Camera
             if (!compensateCursorDuringAds) return;
             if (Mouse.current == null || !Application.isFocused) return;
             // Never warp a visible OS cursor out from under a menu.
-            if (Tactics.UI.CrosshairController.MenuOpen) return;
+            if (Tactics.Core.MenuState.IsOpen) return;
             if ((actualDelta - shadowDelta).sqrMagnitude > biasDeltaSanityCap * biasDeltaSanityCap) return;
 
             Vector3 desired = CameraFollowMath.CompensatedAimPoint(aimBeforeMove, shadowDelta);
@@ -246,16 +248,19 @@ namespace Tactics.Camera
 
         private Vector3 GetMouseWorldPosition()
         {
-            if (Mouse.current == null) return target.position;
+            // While a menu owns the cursor the framing holds its last look
+            // offset — moving the mouse across buttons must not pan the view.
+            if (Tactics.Core.MenuState.IsOpen) return target.position + lastMouseOffset;
 
-            Ray ray = cam.ScreenPointToRay(Mouse.current.position.ReadValue());
-            Plane groundPlane = new Plane(Vector3.up, target.position);
-
-            if (groundPlane.Raycast(ray, out float enter))
+            Vector3 world = target.position;
+            if (Mouse.current != null)
             {
-                return ray.GetPoint(enter);
+                Ray ray = cam.ScreenPointToRay(Mouse.current.position.ReadValue());
+                Plane groundPlane = new Plane(Vector3.up, target.position);
+                if (groundPlane.Raycast(ray, out float enter)) world = ray.GetPoint(enter);
             }
-            return target.position;
+            lastMouseOffset = world - target.position;
+            return world;
         }
 
         public void SetTargetRotation(float yRotation)

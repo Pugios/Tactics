@@ -1,0 +1,266 @@
+.settings-root {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.75);
+    justify-content: center;
+    align-items: center;
+}
+
+.settings-panel {
+    width: 760px;
+    max-width: 95%;
+    height: 90%;
+    background-color: rgb(24, 26, 31);
+    border-width: 1px;
+    border-color: rgb(60, 64, 72);
+    border-radius: 6px;
+    padding: 20px 24px;
+}
+
+.settings-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.settings-title {
+    font-size: 26px;
+    color: white;
+    -unity-font-style: bold;
+}
+
+.tab-bar {
+    flex-direction: row;
+}
+
+.tab {
+    margin-left: 6px;
+    height: 32px;
+    padding-left: 14px;
+    padding-right: 14px;
+    -unity-text-align: middle-center;
+    background-color: rgb(38, 41, 48);
+    color: rgb(170, 175, 185);
+    border-width: 0;
+    border-bottom-width: 2px;
+    border-color: rgba(0, 0, 0, 0);
+    border-radius: 3px;
+    -unity-font-style: bold;
+}
+
+.tab:hover {
+    color: white;
+}
+
+.tab--selected {
+    color: white;
+    background-color: rgb(52, 56, 66);
+    border-bottom-color: rgb(255, 70, 85);
+}
+
+.page-scroll {
+    flex-grow: 1;
+    background-color: rgb(30, 33, 39);
+    border-radius: 4px;
+    padding: 8px 16px;
+}
+
+.page {
+    display: none;
+    padding-bottom: 12px;
+}
+
+.page--visible {
+    display: flex;
+}
+
+.section-title {
+    color: rgb(255, 70, 85);
+    font-size: 13px;
+    -unity-font-style: bold;
+    margin-top: 14px;
+    margin-bottom: 4px;
+}
+
+.setting {
+    margin: 3px 0;
+    min-height: 26px;
+}
+
+.setting > .unity-label,
+.setting .unity-base-field__label {
+    color: rgb(215, 218, 224);
+    min-width: 200px;
+}
+
+.setting-row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    margin: 6px 0;
+}
+
+.hint {
+    color: rgb(140, 146, 158);
+    font-size: 12px;
+    white-space: normal;
+    flex-shrink: 1;
+    margin: 6px 0;
+}
+
+.action-button,
+.footer-button {
+    height: 34px;
+    padding-left: 16px;
+    padding-right: 16px;
+    -unity-text-align: middle-center;
+    background-color: rgb(52, 56, 66);
+    color: white;
+    border-width: 0;
+    border-radius: 3px;
+    -unity-font-style: bold;
+}
+
+.action-button:hover,
+.footer-button:hover {
+    background-color: rgb(68, 73, 85);
+}
+
+.action-button:disabled {
+    opacity: 0.4;
+}
+
+.settings-footer {
+    flex-direction: row;
+    align-items: center;
+    margin-top: 12px;
+}
+
+.footer-spacer {
+    flex-grow: 1;
+}
+
+.footer-button {
+    margin-left: 8px;
+}
+
+.footer-button--primary {
+    background-color: rgb(255, 70, 85);
+}
+
+.footer-button--primary:hover {
+    background-color: rgb(255, 100, 112);
+}
+
+.footer-button--danger {
+    background-color: rgb(80, 36, 40);
+}
+
+.preview-row {
+    flex-direction: row;
+    justify-content: center;
+    margin-top: 8px;
+}
+
+.preview-cell {
+    align-items: center;
+    margin: 0 12px;
+}
+
+.preview-swatch {
+    width: 140px;
+    height: 110px;
+    background-color: rgb(92, 104, 88);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.preview-label {
+    color: rgb(170, 175, 185);
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+.confirm-overlay {
+    display: none;
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.6);
+    justify-content: center;
+    align-items: center;
+}
+
+.confirm-overlay--visible {
+    display: flex;
+}
+
+.confirm-box {
+    width: 380px;
+    background-color: rgb(30, 33, 39);
+    border-width: 1px;
+    border-color: rgb(60, 64, 72);
+    border-radius: 6px;
+    padding: 20px;
+}
+
+.confirm-title {
+    color: white;
+    font-size: 18px;
+    -unity-font-style: bold;
+    margin-bottom: 8px;
+}
+
+.confirm-text {
+    color: rgb(200, 204, 212);
+    margin-bottom: 16px;
+}
+
+.confirm-buttons {
+    flex-direction: row;
+    justify-content: flex-end;
+}
+
+/* Dark inputs: the default runtime theme draws light fields. */
+.setting .unity-base-popup-field__input,
+.setting .unity-base-text-field__input,
+.setting .unity-text-field__input {
+    background-color: rgb(44, 48, 56);
+    border-color: rgb(70, 75, 86);
+    color: rgb(230, 232, 236);
+}
+
+.setting .unity-base-popup-field__text,
+.setting .unity-text-element.unity-text-input {
+    color: rgb(230, 232, 236);
+}
+
+.setting .unity-base-popup-field__arrow {
+    -unity-background-image-tint-color: rgb(200, 204, 212);
+}
+
+.setting .unity-toggle__checkmark {
+    background-color: rgb(44, 48, 56);
+    border-color: rgb(90, 96, 108);
+    -unity-background-image-tint-color: rgb(255, 70, 85);
+}
+
+.setting .unity-base-slider__dragger {
+    background-color: rgb(220, 222, 228);
+    border-color: rgb(90, 96, 108);
+}
+
+.setting .unity-base-slider__tracker {
+    background-color: rgb(70, 75, 86);
+    border-color: rgb(70, 75, 86);
+}
+
+.setting:disabled {
+    opacity: 0.45;
+}

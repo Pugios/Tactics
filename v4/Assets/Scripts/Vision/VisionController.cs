@@ -75,6 +75,8 @@ namespace Tactics.Vision
 
         private readonly List<Renderer> selfRendererScratch = new List<Renderer>();
         private readonly List<Renderer> disabledSelfRenderers = new List<Renderer>();
+        // Pipeline render scale held back while the eye camera renders; 0 = none.
+        private float restoreRenderScale;
         private bool warnedCaptureNotRunning;
         private int captureWarningGraceFrame = 120;
         private Matrix4x4 eyeViewProjection;
@@ -413,6 +415,17 @@ namespace Tactics.Vision
             if (camera != eyeCamera)
                 return;
 
+            // Render scale is a graphics setting, and URP applies it to every
+            // game camera — this one included, which would coarsen the depth map
+            // and blur fog edges for anyone who lowers it. What you can see of
+            // the enemy is gameplay, not graphics: render the eye at full scale.
+            if (GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset pipeline
+                && pipeline.renderScale != 1f)
+            {
+                restoreRenderScale = pipeline.renderScale;
+                pipeline.renderScale = 1f;
+            }
+
             selfRendererScratch.Clear();
             GetComponentsInChildren(false, selfRendererScratch);
 
@@ -432,6 +445,13 @@ namespace Tactics.Vision
         {
             if (camera != eyeCamera)
                 return;
+
+            if (restoreRenderScale > 0f
+                && GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset pipeline)
+            {
+                pipeline.renderScale = restoreRenderScale;
+            }
+            restoreRenderScale = 0f;
 
             for (int i = 0; i < disabledSelfRenderers.Count; i++)
             {

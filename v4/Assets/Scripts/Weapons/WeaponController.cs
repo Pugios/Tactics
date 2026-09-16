@@ -193,9 +193,9 @@ namespace Tactics.Weapons
         {
             if (isReloading) return;
             if (inventory.IsEquipping) return; // no firing or reloading during the draw
-            // Planting/defusing owns the player: no reloading either, and the
-            // fire paths below are skipped with it.
-            if (playerController != null && playerController.IsInteractionLocked) return;
+            // Planting/defusing owns the player, or a menu owns the mouse: no
+            // reloading either, and the fire paths below are skipped with it.
+            if (playerController != null && playerController.IsActionBlocked) return;
 
             var currentWeapon = CurrentWeapon;
 
@@ -251,9 +251,10 @@ namespace Tactics.Weapons
             var currentWeapon = CurrentWeapon;
             if (currentWeapon == null) return;
             if (inventory.IsEquipping) return;
-            // Planting or defusing owns the player; both hands are busy. Melee
-            // swings route through Shoot() as well, so this covers them too.
-            if (playerController != null && playerController.IsInteractionLocked) return;
+            // Planting or defusing owns the player (both hands are busy), or a
+            // click belongs to a menu. Melee swings route through Shoot() as
+            // well, so this covers them too.
+            if (playerController != null && playerController.IsActionBlocked) return;
 
             // IsAiming is already gated on the active weapon having an ADS alt-fire.
             bool ads = playerController != null && playerController.IsAiming;
@@ -261,15 +262,26 @@ namespace Tactics.Weapons
             if (Time.time < lastFireTime + FireModeStats.RequiredGapSeconds(lastFireInterval, interval)) return;
 
             int ammo = inventory.GetActiveAmmo();
-            if (!currentWeapon.infiniteAmmo && ammo <= 0) return;
+            bool usesAmmo = ConsumesAmmo(currentWeapon);
+            if (usesAmmo && ammo <= 0) return;
 
             // A burst off a near-empty magazine still fires — it just throws the
-            // rounds it has, one pellet each.
-            int pellets = FireModeStats.MaxPelletCount(currentWeapon, altShot);
-            if (!currentWeapon.infiniteAmmo) pellets = Mathf.Min(pellets, ammo);
+            // rounds it has, one pellet each. A shotgun shell always throws all.
+            int pellets = usesAmmo
+                ? FireModeStats.PelletsForPull(currentWeapon, altShot, ammo)
+                : FireModeStats.MaxPelletCount(currentWeapon, altShot);
 
             Shoot(currentWeapon, altShot, interval, pellets);
         }
+
+        /// <summary>
+        /// Whether firing drains the magazine: not for weapons that never use
+        /// ammo (the knife), and not while the Infinite Ammo cheat is on. A
+        /// reload stays available under the cheat, so a magazine that was
+        /// already short when it was switched on can still be topped up.
+        /// </summary>
+        private static bool ConsumesAmmo(WeaponData weapon) =>
+            !weapon.infiniteAmmo && !Tactics.Core.MatchRules.InfiniteAmmo;
 
         /// <summary>
         /// The world point the next shot would fly toward: the first surface the
@@ -289,37 +301,42 @@ namespace Tactics.Weapons
         /// <summary>
         /// The spread cone (degrees) the owner's next shot would get right now —
         /// same pure SpreadCalculator math as the server, fed from zero-latency
-        /// local inputs and the owner's predicted movement state. Crosshair input.
+        /// local inputs and the owner's predicted movement state.
         /// </summary>
-        public float CurrentSpreadDegrees
+        public float CurrentSpreadDegrees => GetDisplayedSpreadDegrees(true, true);
+
+        /// <summary>
+        /// <see cref="CurrentSpreadDegrees"/> with firing and/or movement error
+        /// left out, as the crosshair settings ask. Crosshair input.
+        /// </summary>
+        public float GetDisplayedSpreadDegrees(bool includeFiringError, bool includeMovementError)
         {
-            get
-            {
-                var weapon = CurrentWeapon;
-                if (weapon == null) return 0f;
-                float sprayIndex = SpreadCalculator.DecaySprayIndex(localSprayIndex,
-                    Time.time - localLastFireTime, weapon.sprayDecayDelay, weapon.sprayDecayPerSecond);
-                bool crouched = playerController != null && playerController.IsCrouching;
-                bool walking = playerController != null && playerController.IsWalking;
-                // Whichever alt-fire this weapon has: a held right click for a
-                // shotgun burst, the ADS stance for everything else.
-                bool altFire = weapon.altFireType == AltFireType.Shotgun
-                    ? AltFireHeld
-                    : (playerController != null && playerController.IsAiming);
-                bool grounded = movementNetwork == null || movementNetwork.PredictedGrounded;
-                float horizontalSpeed = movementNetwork != null ? movementNetwork.PredictedHorizontalSpeed : 0f;
-                Tactics.Player.MovementState movement = Tactics.Player.MovementClassifier.Classify(
-                    grounded, crouched, walking, horizontalSpeed);
-                return SpreadCalculator.ComputeSpreadDegrees(weapon, sprayIndex, crouched, altFire, movement);
-            }
+            var weapon = CurrentWeapon;
+            if (weapon == null) return 0f;
+            float sprayIndex = SpreadCalculator.DecaySprayIndex(localSprayIndex,
+                Time.time - localLastFireTime, weapon.sprayDecayDelay, weapon.sprayDecayPerSecond);
+            bool crouched = playerController != null && playerController.IsCrouching;
+            bool walking = playerController != null && playerController.IsWalking;
+            // Whichever alt-fire this weapon has: a held right click for a
+            // shotgun burst, the ADS stance for everything else.
+            bool altFire = weapon.altFireType == AltFireType.Shotgun
+                ? AltFireHeld
+                : (playerController != null && playerController.IsAiming);
+            bool grounded = movementNetwork == null || movementNetwork.PredictedGrounded;
+            float horizontalSpeed = movementNetwork != null ? movementNetwork.PredictedHorizontalSpeed : 0f;
+            Tactics.Player.MovementState movement = Tactics.Player.MovementClassifier.Classify(
+                grounded, crouched, walking, horizontalSpeed);
+            return SpreadCalculator.ComputeDisplayedSpreadDegrees(weapon, sprayIndex, crouched, altFire, movement,
+                includeFiringError, includeMovementError);
         }
 
         private void Shoot(WeaponData currentWeapon, bool altShot, float interval, int pellets)
         {
             lastFireTime = Time.time;
             lastFireInterval = interval;
-            // One round per pellet: a 3-pellet burst costs 3.
-            if (!currentWeapon.infiniteAmmo) inventory.SetActiveAmmo(inventory.GetActiveAmmo() - pellets);
+            // A 3-pellet burst costs 3 rounds; a 12-pellet Judge shell costs 1.
+            if (ConsumesAmmo(currentWeapon))
+                inventory.SetActiveAmmo(inventory.GetActiveAmmo() - FireModeStats.RoundsForPull(currentWeapon, altShot, pellets));
 
             // A knife swing makes no gunshot: it must not raise the shoot-sound
             // signal enemies read off the SoundVisualizer.

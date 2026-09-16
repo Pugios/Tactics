@@ -1,0 +1,102 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+    <ui:Style src="SettingsMenu.uss" />
+    <ui:VisualElement name="settingsRoot" class="settings-root">
+        <ui:VisualElement name="settingsPanel" class="settings-panel">
+            <ui:VisualElement class="settings-header">
+                <ui:Label text="SETTINGS" class="settings-title" />
+                <ui:VisualElement name="tabBar" class="tab-bar">
+                    <ui:Button name="tabVideo" text="VIDEO" class="tab" />
+                    <ui:Button name="tabGraphics" text="GRAPHICS" class="tab" />
+                    <ui:Button name="tabCrosshair" text="CROSSHAIR" class="tab" />
+                    <ui:Button name="tabCheats" text="CHEATS" class="tab" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+
+            <ui:ScrollView name="pageScroll" class="page-scroll" horizontal-scroller-visibility="Hidden">
+                <!-- VIDEO -->
+                <ui:VisualElement name="pageVideo" class="page">
+                    <ui:Label text="DISPLAY" class="section-title" />
+                    <ui:DropdownField name="windowModeField" label="Window Mode" class="setting" />
+                    <ui:DropdownField name="resolutionField" label="Resolution" class="setting" />
+                    <ui:VisualElement class="setting-row">
+                        <ui:Label name="displayHint" text="Display changes take effect in a build, not in the Editor." class="hint" />
+                        <ui:Button name="applyDisplayButton" text="APPLY" class="action-button" />
+                    </ui:VisualElement>
+                    <ui:Label text="FRAME RATE" class="section-title" />
+                    <ui:Toggle name="vsyncToggle" label="VSync" class="setting" />
+                    <ui:DropdownField name="frameCapField" label="Frame Rate Limit" class="setting" />
+                </ui:VisualElement>
+
+                <!-- GRAPHICS -->
+                <ui:VisualElement name="pageGraphics" class="page">
+                    <ui:DropdownField name="presetField" label="Quality Preset" class="setting" />
+                    <ui:SliderInt name="renderScaleSlider" label="Render Scale (%)" low-value="50" high-value="100" show-input-field="true" class="setting" />
+                    <ui:DropdownField name="msaaField" label="Anti-Aliasing" class="setting" />
+                    <ui:DropdownField name="shadowsField" label="Shadows" class="setting" />
+                    <ui:Label text="Fog of war is gameplay, not graphics: no option here changes what you can see of the enemy." class="hint" />
+                </ui:VisualElement>
+
+                <!-- CROSSHAIR -->
+                <ui:VisualElement name="pageCrosshair" class="page">
+                    <ui:VisualElement class="preview-row">
+                        <ui:VisualElement class="preview-cell">
+                            <ui:VisualElement name="previewPlus" class="preview-swatch" />
+                            <ui:Label text="Rifles &amp; pistols" class="preview-label" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="preview-cell">
+                            <ui:VisualElement name="previewCircle" class="preview-swatch" />
+                            <ui:Label text="Shotguns" class="preview-label" />
+                        </ui:VisualElement>
+                    </ui:VisualElement>
+
+                    <ui:Label text="SPREAD" class="section-title" />
+                    <ui:Toggle name="showFiringErrorToggle" label="Show Firing Error" class="setting" />
+                    <ui:Toggle name="showMovementErrorToggle" label="Show Movement Error" class="setting" />
+
+                    <ui:Label text="COLOR" class="section-title" />
+                    <ui:DropdownField name="colorPresetField" label="Color" class="setting" />
+                    <ui:TextField name="colorHexField" label="Hex (RRGGBB)" max-length="7" class="setting" />
+                    <ui:Slider name="opacitySlider" label="Opacity" low-value="0" high-value="1" show-input-field="true" class="setting" />
+                    <ui:Slider name="outlineThicknessSlider" label="Outline Thickness" low-value="0" high-value="4" show-input-field="true" class="setting" />
+                    <ui:Slider name="outlineOpacitySlider" label="Outline Opacity" low-value="0" high-value="1" show-input-field="true" class="setting" />
+
+                    <ui:Label text="PLUS" class="section-title" />
+                    <ui:Slider name="plusLengthSlider" label="Line Length" low-value="0" high-value="20" show-input-field="true" class="setting" />
+                    <ui:Slider name="plusThicknessSlider" label="Line Thickness" low-value="0.5" high-value="10" show-input-field="true" class="setting" />
+                    <ui:Slider name="plusGapSlider" label="Center Gap" low-value="0" high-value="20" show-input-field="true" class="setting" />
+
+                    <ui:Label text="CIRCLE" class="section-title" />
+                    <ui:Slider name="circleThicknessSlider" label="Circle Thickness" low-value="0.5" high-value="10" show-input-field="true" class="setting" />
+                    <ui:Toggle name="centerDotToggle" label="Center Dot" class="setting" />
+                    <ui:Slider name="dotRadiusSlider" label="Dot Size" low-value="0.5" high-value="6" show-input-field="true" class="setting" />
+                </ui:VisualElement>
+
+                <!-- CHEATS -->
+                <ui:VisualElement name="pageCheats" class="page">
+                    <ui:Label name="cheatsStatusLabel" text="" class="hint" />
+                    <ui:Toggle name="infiniteAmmoToggle" label="Infinite Ammo" class="setting" />
+                    <ui:Toggle name="alwaysBuyToggle" label="Always Buy" class="setting" />
+                    <ui:Toggle name="infiniteCreditsToggle" label="Infinite Credits" class="setting" />
+                </ui:VisualElement>
+            </ui:ScrollView>
+
+            <ui:VisualElement class="settings-footer">
+                <ui:Button name="resetTabButton" text="RESET TAB TO DEFAULTS" class="footer-button" />
+                <ui:VisualElement class="footer-spacer" />
+                <ui:Button name="quitButton" text="QUIT GAME" class="footer-button footer-button--danger" />
+                <ui:Button name="resumeButton" text="RESUME (ESC)" class="footer-button footer-button--primary" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <ui:VisualElement name="confirmDialog" class="confirm-overlay">
+            <ui:VisualElement class="confirm-box">
+                <ui:Label text="Keep these display settings?" class="confirm-title" />
+                <ui:Label name="confirmCountdownLabel" text="Reverting in 15 seconds." class="confirm-text" />
+                <ui:VisualElement class="confirm-buttons">
+                    <ui:Button name="confirmRevertButton" text="REVERT" class="footer-button" />
+                    <ui:Button name="confirmKeepButton" text="KEEP" class="footer-button footer-button--primary" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

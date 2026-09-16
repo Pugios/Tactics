@@ -8,7 +8,7 @@ using Tactics.Weapons;
 
 namespace Tactics.UI
 {
-    public class BuyMenuController : MonoBehaviour
+    public class BuyMenuController : MonoBehaviour, IGameMenu
     {
         [SerializeField] private UIDocument uiDocument;
         [SerializeField] private WeaponData judgeData;
@@ -20,33 +20,37 @@ namespace Tactics.UI
         private InputAction buyAction;
         private bool isMenuOpen = false;
 
+        // Walking while shopping is normal in Valorant; only the Esc menu freezes.
+        public bool FreezesPlayer => false;
+
+        public void Cancel() => SetOpen(false);
+
         private void OnEnable()
         {
             root = uiDocument.rootVisualElement;
             root.style.display = DisplayStyle.None;
-            // The static flag outlives scene loads (and editor domain-reload
-            // settings), so re-sync it with the menu's actual closed state.
-            CrosshairController.MenuOpen = false;
+            isMenuOpen = false;
 
             credsLabel = root.Q<Label>("credsLabel");
-            
+
             root.Q<Button>("judgeBtn").clicked += () => TryBuy(judgeData);
             root.Q<Button>("vandalBtn").clicked += () => TryBuy(vandalData);
             root.Q<Button>("operatorBtn").clicked += () => TryBuy(operatorData);
             root.Q<Button>("closeBtn").clicked += ToggleMenu;
 
             buyAction = InputSystem.actions.FindAction("Buy");
-            
+
             if (EconomyManager.Instance != null)
             {
                 EconomyManager.Instance.OnCredsChanged += UpdateCreds;
                 UpdateCreds(EconomyManager.Instance.GetCurrentCreds());
             }
-}
+        }
 
         private void OnDisable()
         {
-            EconomyManager.Instance.OnCredsChanged -= UpdateCreds;
+            if (EconomyManager.Instance != null) EconomyManager.Instance.OnCredsChanged -= UpdateCreds;
+            MenuState.NotifyClosed(this);
         }
 
         private void Update()
@@ -55,32 +59,47 @@ namespace Tactics.UI
             {
                 ToggleMenu();
             }
+
+            // The shop closes itself when the buy phase ends, as in Valorant —
+            // unless the Always Buy cheat keeps it open for business.
+            if (isMenuOpen && !CanShopNow()) SetOpen(false);
         }
+
+        private static bool CanShopNow() =>
+            MatchRules.AlwaysBuy || GameManager.Instance.GetCurrentState() == GameState.BuyPhase;
 
         private void ToggleMenu()
         {
-            if (!isMenuOpen && GameManager.Instance.GetCurrentState() != GameState.BuyPhase)
+            if (!isMenuOpen && !CanShopNow())
             {
                 Debug.Log("Cannot buy outside of Buy Phase!");
                 return;
             }
 
-            isMenuOpen = !isMenuOpen;
+            SetOpen(!isMenuOpen);
+        }
+
+        private void SetOpen(bool open)
+        {
+            if (open == isMenuOpen) return;
+            // Another menu (the Esc menu) already has the screen.
+            if (open && !MenuState.TryOpen(this)) return;
+            if (!open) MenuState.NotifyClosed(this);
+
+            isMenuOpen = open;
             root.style.display = isMenuOpen ? DisplayStyle.Flex : DisplayStyle.None;
-
-            // Menus need the OS pointer; the crosshair hides itself and hands
-            // the cursor back while this is set.
-            CrosshairController.MenuOpen = isMenuOpen;
-
-            // Lock/Unlock player movement/rotation if needed
-            // For now just toggle UI
         }
 
         private void TryBuy(WeaponData weapon)
         {
             if (weapon == null) return;
 
-            if (EconomyManager.Instance.CanAfford(weapon.cost))
+            if (MatchRules.InfiniteCredits)
+            {
+                EquipWeapon(weapon);
+                Debug.Log("Bought " + weapon.weaponName + " (Infinite Credits)");
+            }
+            else if (EconomyManager.Instance.CanAfford(weapon.cost))
             {
                 EconomyManager.Instance.Spend(weapon.cost);
                 EquipWeapon(weapon);

@@ -129,6 +129,24 @@ namespace Tactics.Weapons
         }
 
         /// <summary>
+        /// The spread cone with either error source left out, for a crosshair
+        /// whose player hid firing or movement error. Hiding firing error reads
+        /// the spray as settled (first-shot spread); hiding movement error reads
+        /// the player as standing still. The stance column (crouched, alt-fire)
+        /// is neither, so it always applies. Display only — shots always use
+        /// the full <see cref="ComputeSpreadDegrees(WeaponData, float, bool, bool, MovementState)"/>.
+        /// </summary>
+        public static float ComputeDisplayedSpreadDegrees(WeaponData weapon, float sprayIndex,
+            bool crouched, bool altFire, MovementState movement,
+            bool includeFiringError, bool includeMovementError)
+        {
+            return ComputeSpreadDegrees(weapon,
+                includeFiringError ? sprayIndex : 0f,
+                crouched, altFire,
+                includeMovementError ? movement : MovementState.Stationary);
+        }
+
+        /// <summary>
         /// Full per-shot offset: deterministic recoil + a spread roll drawn from
         /// (seed, shotNumber). Hashing instead of a sequential RNG means a shot
         /// the server rejects (cadence) can never shift the stream out of sync
