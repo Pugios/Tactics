@@ -300,13 +300,15 @@ namespace Tactics.Tests.EditMode
         [Test]
         public void Decay_WithinGracePeriod_KeepsIndex()
         {
-            Assert.AreEqual(6f, SpreadCalculator.DecaySprayIndex(6f, 0.1f, decayDelay: 0.15f, decayPerSecond: 15f));
+            Assert.AreEqual(6f, SpreadCalculator.DecaySprayIndex(6f, 0.1f, requiredGapSeconds: 0f,
+                decayDelay: 0.15f, decayPerSecond: 15f));
         }
 
         [Test]
         public void Decay_ShortPause_PartiallyRecovers()
         {
-            float decayed = SpreadCalculator.DecaySprayIndex(6f, 0.35f, decayDelay: 0.15f, decayPerSecond: 15f);
+            float decayed = SpreadCalculator.DecaySprayIndex(6f, 0.35f, requiredGapSeconds: 0f,
+                decayDelay: 0.15f, decayPerSecond: 15f);
 
             Assert.AreEqual(3f, decayed, 0.001f);
         }
@@ -314,8 +316,32 @@ namespace Tactics.Tests.EditMode
         [Test]
         public void Decay_LongPause_FullyResets_NeverNegative()
         {
-            Assert.AreEqual(0f, SpreadCalculator.DecaySprayIndex(6f, 10f, decayDelay: 0.15f, decayPerSecond: 15f));
-            Assert.AreEqual(0f, SpreadCalculator.DecaySprayIndex(0f, float.PositiveInfinity, 0.15f, 15f));
+            Assert.AreEqual(0f, SpreadCalculator.DecaySprayIndex(6f, 10f, 0f, decayDelay: 0.15f, decayPerSecond: 15f));
+            Assert.AreEqual(0f, SpreadCalculator.DecaySprayIndex(0f, float.PositiveInfinity, 0f, 0.15f, 15f));
+        }
+
+        /// <summary>
+        /// The regression: a weapon slower than the decay delay (5.4/s = 0.185 s
+        /// against 0.15 s) used to bleed ~0.5 spray index out of every gap of a
+        /// max-rate spray. Grace now runs from when the gun is ready again.
+        /// </summary>
+        [Test]
+        public void Decay_MaxCadenceSlowerThanDelay_NeverRecovers()
+        {
+            float gap = 1f / 5.4f;
+            float index = 0f;
+            for (int shot = 0; shot < 7; shot++)
+                index = SpreadCalculator.DecaySprayIndex(index, gap, gap, 0.15f, 15f) + 1f;
+
+            Assert.AreEqual(7f, index, 0.0001f);
+        }
+
+        [Test]
+        public void Decay_GraceStartsWhenGunIsReady()
+        {
+            // Ready at 0.5 s, grace to 0.65 s, then 0.2 s × 15/s = 3 recovered.
+            Assert.AreEqual(6f, SpreadCalculator.DecaySprayIndex(6f, 0.65f, 0.5f, 0.15f, 15f), 0.0001f);
+            Assert.AreEqual(3f, SpreadCalculator.DecaySprayIndex(6f, 0.85f, 0.5f, 0.15f, 15f), 0.001f);
         }
 
         // --- World-space projection ---

@@ -637,38 +637,32 @@ namespace Tactics.Tests.EditMode
         // --- Spray decay interaction with the two cadences ---
 
         /// <summary>
-        /// Documents a deliberate consequence of the shipped tuning: the gap
-        /// between alt bursts (0.45 s) far exceeds the decay grace, so the spray
-        /// index is back to zero before every burst. Pure right-click play sits
-        /// permanently at first-shot spread, and altMaxSpread only bites a player
-        /// who was just spraying primary. sprayDecayDelay is the knob that
-        /// changes this.
+        /// Spamming right click stacks like any other spray: the decay grace
+        /// runs from when the burst's own 0.45 s cadence ends, so bursts at
+        /// max rate climb toward altMaxSpread instead of resetting every time.
         /// </summary>
         [Test]
-        public void ClassicAlt_ConsecutiveBursts_DecayFullyResetsSprayIndex()
+        public void ClassicAlt_ConsecutiveBursts_StackSprayIndex()
         {
             WeaponData weapon = MakeClassic();
-            float altGap = 1f / weapon.altFireRate;
+            float altGap = FireModeStats.IntervalSeconds(weapon, true, false);
 
-            Assert.AreEqual(0f, SpreadCalculator.DecaySprayIndex(1f, altGap,
+            Assert.AreEqual(1f, SpreadCalculator.DecaySprayIndex(1f, altGap,
+                FireModeStats.RequiredGapSeconds(altGap, altGap),
                 weapon.sprayDecayDelay, weapon.sprayDecayPerSecond), 0.0001f);
         }
 
         /// <summary>
-        /// Why the Classic carries sprayDecayDelay 0.2 rather than the usual
-        /// 0.15: its 6.75/s gap is 0.148 s, only 1.3 ms inside the shorter grace,
-        /// so frame timing would decide whether a spray grew at all.
+        /// Frame jitter past the fire interval must not bleed a max-rate spray.
         /// </summary>
         [Test]
         public void ClassicPrimary_MaxCadence_DoesNotDecay()
         {
             WeaponData weapon = MakeClassic();
-            float primaryGap = 1f / weapon.fireRate;
+            float primaryGap = FireModeStats.IntervalSeconds(weapon, false, false);
 
-            Assert.AreEqual(3f, SpreadCalculator.DecaySprayIndex(3f, primaryGap,
+            Assert.AreEqual(3f, SpreadCalculator.DecaySprayIndex(3f, primaryGap + 0.017f, primaryGap,
                 weapon.sprayDecayDelay, weapon.sprayDecayPerSecond), 0.0001f);
-            // One frame of jitter past the old 0.15 s grace would have bled the spray.
-            Assert.Less(SpreadCalculator.DecaySprayIndex(3f, primaryGap + 0.017f, 0.15f, 15f), 3f);
         }
     }
 }

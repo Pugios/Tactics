@@ -49,15 +49,22 @@ namespace Tactics.Weapons
 
         /// <summary>
         /// Bleeds the spray index back toward zero for time spent not shooting.
-        /// A short grace period keeps normal full-auto cadence from decaying
-        /// mid-spray; after it, recovery is gradual — a brief pause resumes the
-        /// spray partway up the pattern instead of resetting it.
+        /// Recovery only starts once the gun has been READY to fire again for
+        /// <paramref name="decayDelay"/> seconds — the grace is measured from the
+        /// end of the shot's own cadence gap, not from the shot. Measured from
+        /// the shot, any weapon whose fire interval exceeded the delay (a 5.4/s
+        /// Vandal is 0.185 s against 0.15 s) bled recovery into every gap of a
+        /// max-rate spray, so spread barely grew or never grew at all. Firing
+        /// as fast as the gun allows therefore never recovers; after the grace,
+        /// recovery is gradual — a brief pause resumes the spray partway up the
+        /// pattern instead of resetting it.
         /// </summary>
         public static float DecaySprayIndex(float sprayIndex, float secondsSinceLastShot,
-            float decayDelay, float decayPerSecond)
+            float requiredGapSeconds, float decayDelay, float decayPerSecond)
         {
-            if (secondsSinceLastShot <= decayDelay) return sprayIndex;
-            return Mathf.Max(0f, sprayIndex - (secondsSinceLastShot - decayDelay) * decayPerSecond);
+            float grace = Mathf.Max(requiredGapSeconds, 0f) + decayDelay;
+            if (secondsSinceLastShot <= grace) return sprayIndex;
+            return Mathf.Max(0f, sprayIndex - (secondsSinceLastShot - grace) * decayPerSecond);
         }
 
         /// <summary>Deterministic recoil (the T): x = sway degrees, y = backward climb degrees.</summary>

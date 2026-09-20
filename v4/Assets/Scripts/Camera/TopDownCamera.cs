@@ -23,6 +23,10 @@ namespace Tactics.Camera
         [SerializeField] private float rotationSmoothness = 0.1f;
         [SerializeField] private float zoomSensitivity = 5f;
 
+        [Header("Aim Lock")]
+        [Tooltip("The camera yaw follows the aim by default; aim may swing this far from the current yaw before the camera rotates at all. Holding CenterCamera (Caps Lock) suspends the follow entirely.")]
+        [SerializeField, Range(0f, 90f)] private float aimLockYawDeadzoneDegrees = 25f;
+
         [Header("ADS Cursor Compensation")]
         [Tooltip("Warp the OS cursor each frame so the aimed world point is unaffected by the ADS camera bias.")]
         [SerializeField] private bool compensateCursorDuringAds = true;
@@ -263,9 +267,21 @@ namespace Tactics.Camera
             return world;
         }
 
-        public void SetTargetRotation(float yRotation)
+        /// <summary>
+        /// The default aim lock: follow the aim yaw, but only once it leaves
+        /// the deadzone band around the current target — inside the band the view
+        /// holds perfectly still. Past the edge the target is dragged so the aim
+        /// sits exactly on the band edge, so the band re-centers as the turn
+        /// continues. The player stops calling this while CenterCamera (Caps Lock)
+        /// is held, which freezes the yaw at whatever it had reached. Ignored while
+        /// QuickAlign owns the yaw: AlignRoutine rewrites
+        /// targetRotationY every frame, so the band must anchor on the angle it
+        /// settles at, not on one being overwritten.
+        /// </summary>
+        public void FollowAimYawWithDeadzone(float aimYaw)
         {
-            targetRotationY = yRotation;
+            if (alignCoroutine != null) return;
+            targetRotationY = CameraFollowMath.DeadzonedYaw(targetRotationY, aimYaw, aimLockYawDeadzoneDegrees);
         }
 
         public void QuickAlign(float targetAngle, float duration)

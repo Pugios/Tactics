@@ -236,5 +236,68 @@ namespace Tactics.Tests.EditMode
             Assert.LessOrEqual(Mathf.Abs(player.x - clamped.x), HalfWidth - Margin + 1e-3f);
             Assert.Greater(Mathf.Abs(player.x - free.x), HalfWidth);
         }
+
+        // --- DeadzonedYaw (Caps Lock aim lock) ---
+
+        private const float Deadzone = 25f;
+
+        [Test]
+        public void DeadzonedYaw_AimInsideBand_ReturnsCurrentYawUntouched()
+        {
+            // Bit-identical, not merely close: the view must be perfectly still.
+            Assert.AreEqual(90f, CameraFollowMath.DeadzonedYaw(90f, 90f, Deadzone));
+            Assert.AreEqual(90f, CameraFollowMath.DeadzonedYaw(90f, 110f, Deadzone));
+            Assert.AreEqual(90f, CameraFollowMath.DeadzonedYaw(90f, 70f, Deadzone));
+            Assert.AreEqual(90f, CameraFollowMath.DeadzonedYaw(90f, 115f, Deadzone)); // exactly on the edge
+        }
+
+        [Test]
+        public void DeadzonedYaw_JitteringAimInsideBand_NeverCreeps()
+        {
+            float yaw = 90f;
+            for (int i = 0; i < 500; i++)
+                yaw = CameraFollowMath.DeadzonedYaw(yaw, 90f + 20f * Mathf.Sin(i), Deadzone);
+            Assert.AreEqual(90f, yaw);
+        }
+
+        [Test]
+        public void DeadzonedYaw_AimOutsideBand_DragsAimOntoTheEdge()
+        {
+            // The camera follows only the excess: the aim ends exactly on the edge.
+            float right = CameraFollowMath.DeadzonedYaw(90f, 150f, Deadzone);
+            Assert.AreEqual(125f, right, 1e-4f);
+            Assert.AreEqual(Deadzone, Mathf.Abs(Mathf.DeltaAngle(right, 150f)), 1e-4f);
+
+            float left = CameraFollowMath.DeadzonedYaw(90f, 30f, Deadzone);
+            Assert.AreEqual(55f, left, 1e-4f);
+            Assert.AreEqual(Deadzone, Mathf.Abs(Mathf.DeltaAngle(left, 30f)), 1e-4f);
+        }
+
+        [Test]
+        public void DeadzonedYaw_WrapsAcrossZero()
+        {
+            Assert.AreEqual(355f, CameraFollowMath.DeadzonedYaw(355f, 10f, Deadzone));   // delta 15 -> frozen
+            Assert.AreEqual(35f, CameraFollowMath.DeadzonedYaw(355f, 60f, Deadzone), 1e-3f);
+            Assert.AreEqual(330f, CameraFollowMath.DeadzonedYaw(10f, 305f, Deadzone), 1e-3f);
+        }
+
+        [Test]
+        public void DeadzonedYaw_ResultStaysNormalized()
+        {
+            // A long held turn must not accumulate yaw far outside [0, 360).
+            float yaw = 0f;
+            for (int i = 0; i < 200; i++)
+                yaw = CameraFollowMath.DeadzonedYaw(yaw, yaw + 40f, Deadzone);
+            Assert.GreaterOrEqual(yaw, 0f);
+            Assert.Less(yaw, 360f);
+        }
+
+        [Test]
+        public void DeadzonedYaw_ZeroOrNegativeDeadzone_TracksAimOneToOne()
+        {
+            // The pre-deadzone behaviour, preserved: garbage clamps to no band.
+            Assert.AreEqual(0f, Mathf.DeltaAngle(CameraFollowMath.DeadzonedYaw(90f, 150f, 0f), 150f), 1e-4f);
+            Assert.AreEqual(0f, Mathf.DeltaAngle(CameraFollowMath.DeadzonedYaw(90f, 30f, -10f), 30f), 1e-4f);
+        }
     }
 }

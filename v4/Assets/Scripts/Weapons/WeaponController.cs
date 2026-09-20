@@ -65,6 +65,7 @@ namespace Tactics.Weapons
         // rejection at worst makes this briefly OVER-estimate the cone.
         private float localSprayIndex;
         private float localLastFireTime = float.NegativeInfinity;
+        private float localLastFireInterval;
 
         public int CurrentAmmo => inventory != null ? inventory.GetActiveAmmo() : 0;
         public WeaponData CurrentWeapon => inventory != null ? inventory.GetActiveWeaponData() : null;
@@ -313,8 +314,6 @@ namespace Tactics.Weapons
         {
             var weapon = CurrentWeapon;
             if (weapon == null) return 0f;
-            float sprayIndex = SpreadCalculator.DecaySprayIndex(localSprayIndex,
-                Time.time - localLastFireTime, weapon.sprayDecayDelay, weapon.sprayDecayPerSecond);
             bool crouched = playerController != null && playerController.IsCrouching;
             bool walking = playerController != null && playerController.IsWalking;
             // Whichever alt-fire this weapon has: a held right click for a
@@ -322,6 +321,14 @@ namespace Tactics.Weapons
             bool altFire = weapon.altFireType == AltFireType.Shotgun
                 ? AltFireHeld
                 : (playerController != null && playerController.IsAiming);
+            // The pull this preview stands for: a held shotgun alt is a burst,
+            // an ADS stance is primary fire at the aimed rate.
+            bool ads = playerController != null && playerController.IsAiming;
+            float nextInterval = FireModeStats.IntervalSeconds(weapon, altFire, ads);
+            float sprayIndex = SpreadCalculator.DecaySprayIndex(localSprayIndex,
+                Time.time - localLastFireTime,
+                FireModeStats.RequiredGapSeconds(localLastFireInterval, nextInterval),
+                weapon.sprayDecayDelay, weapon.sprayDecayPerSecond);
             bool grounded = movementNetwork == null || movementNetwork.PredictedGrounded;
             float horizontalSpeed = movementNetwork != null ? movementNetwork.PredictedHorizontalSpeed : 0f;
             Tactics.Player.MovementState movement = Tactics.Player.MovementClassifier.Classify(
@@ -378,8 +385,11 @@ namespace Tactics.Weapons
             // order the server applies, only for shots that are actually sent,
             // so the crosshair tracks serverSprayIndex.
             localSprayIndex = SpreadCalculator.DecaySprayIndex(localSprayIndex,
-                Time.time - localLastFireTime, currentWeapon.sprayDecayDelay, currentWeapon.sprayDecayPerSecond) + 1f;
+                Time.time - localLastFireTime,
+                FireModeStats.RequiredGapSeconds(localLastFireInterval, interval),
+                currentWeapon.sprayDecayDelay, currentWeapon.sprayDecayPerSecond) + 1f;
             localLastFireTime = Time.time;
+            localLastFireInterval = interval;
 
             ShootServerRpc(aimPoint, weaponId, altShot, pellets);
         }
@@ -449,7 +459,7 @@ namespace Tactics.Weapons
                 serverLastWeaponId = weaponId;
             }
             serverSprayIndex = SpreadCalculator.DecaySprayIndex(serverSprayIndex, secondsSinceLastShot,
-                weapon.sprayDecayDelay, weapon.sprayDecayPerSecond);
+                (float)requiredGap, weapon.sprayDecayDelay, weapon.sprayDecayPerSecond);
             Tactics.Player.MovementState movement = movementNetwork != null
                 ? movementNetwork.GetAuthoritativeMovementState()
                 : Tactics.Player.MovementState.Stationary;

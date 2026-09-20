@@ -10,6 +10,7 @@ namespace Tactics.Player
     public class PlayerController : NetworkBehaviour
     {
         private UnityEngine.Camera mainCamera;
+        private Tactics.Camera.TopDownCamera topDownCamera;
 
         private InputAction moveAction;
         private InputAction walkAction;
@@ -84,6 +85,7 @@ namespace Tactics.Player
         private void Awake()
         {
             mainCamera = UnityEngine.Camera.main;
+            if (mainCamera != null) topDownCamera = mainCamera.GetComponent<Tactics.Camera.TopDownCamera>();
             weaponInventory = GetComponent<Tactics.Weapons.WeaponInventory>();
             if (visionOrigin != null) visionOriginStandingLocalY = visionOrigin.localPosition.y;
         }
@@ -116,10 +118,9 @@ namespace Tactics.Player
                 return;
             }
 
-            var tdCam = UnityEngine.Camera.main != null
-                ? UnityEngine.Camera.main.GetComponent<Tactics.Camera.TopDownCamera>()
-                : null;
-            if (tdCam != null) tdCam.SetTarget(transform);
+            if (topDownCamera == null && UnityEngine.Camera.main != null)
+                topDownCamera = UnityEngine.Camera.main.GetComponent<Tactics.Camera.TopDownCamera>();
+            if (topDownCamera != null) topDownCamera.SetTarget(transform);
 
             // You must always see yourself — a bad LOS ray to your own capsule
             // (e.g. crouched near a corner) shouldn't cull your own renderer.
@@ -129,51 +130,28 @@ namespace Tactics.Player
 
         private void Update()
         {
-            // CenterCamera warps the OS cursor, which must never happen to a
-            // pointer that's busy clicking menu buttons.
-            if (!MenuState.IsOpen) HandleCenterCamera();
             HandleRotation();
+            // After HandleRotation, so the camera follows THIS frame's facing.
+            // Skipped with a menu open: the aim is frozen on its last offset
+            // there, so the view must not creep either.
+            if (!MenuState.IsOpen) HandleAimLock();
             SampleInput();
         }
 
-        private void HandleCenterCamera()
+        /// <summary>
+        /// The camera yaw follows the aim by default, held perfectly still while
+        /// the aim stays inside the camera's deadzone band and dragged along only
+        /// past its edge. Holding CenterCamera (Caps Lock) is the escape hatch:
+        /// the camera stops rotating and freezes at its current yaw — the classic
+        /// fixed-yaw view — while the character keeps facing the mouse as always.
+        /// Releasing resumes the follow, and the camera's own rotation smoothing
+        /// drags the view back onto the aim; nothing snaps and the cursor is never
+        /// warped, so the crosshair stays exactly where the player put it.
+        /// </summary>
+        private void HandleAimLock()
         {
-            if (centerCameraAction != null && centerCameraAction.IsPressed())
-            {
-                // tdCam = Script attached to Main Camera | Handles Rotation/Movement
-                var tdCam = mainCamera.GetComponent<Tactics.Camera.TopDownCamera>();
-                if (tdCam != null)
-                {
-                    if (centerCameraAction.WasPressedThisFrame())
-                    {
-                        // 1. Capture intended direction BEFORE warping mouse
-                        Vector3 targetDirection = transform.forward;
-                        Ray ray = mainCamera.ScreenPointToRay(Mouse.current.position.ReadValue());
-                        Plane groundPlane = new Plane(Vector3.up, transform.position);
-                        // Ray against virtual infinite ground plane to allow rotation even when aiming at nothing/walls
-                        if (groundPlane.Raycast(ray, out float enter))
-                        {
-                            Vector3 hitPoint = ray.GetPoint(enter);
-                            targetDirection = (hitPoint - transform.position).normalized;
-                            targetDirection.y = 0;
-                        }
-
-                        float targetAngle = Quaternion.LookRotation(targetDirection).eulerAngles.y;
-
-                        // 2. Warp mouse to top-center of screen
-                        Vector2 warpPos = new Vector2(Screen.width * 0.5f, Screen.height * 0.9f);
-                        Mouse.current.WarpCursorPosition(warpPos);
-
-                        // 3. Smoothly align to that specific direction
-                        tdCam.QuickAlign(targetAngle, 0.1f);
-                    }
-                    else
-                    {
-                        // Smoothly follow while holding
-                        tdCam.SetTargetRotation(transform.eulerAngles.y);
-                    }
-                }
-            }
+            if (centerCameraAction != null && centerCameraAction.IsPressed()) return;
+            if (topDownCamera != null) topDownCamera.FollowAimYawWithDeadzone(transform.eulerAngles.y);
         }
 
         [Header("Vision")]

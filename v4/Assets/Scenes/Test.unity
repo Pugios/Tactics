@@ -377,6 +377,7 @@ MonoBehaviour:
   smoothness: 0.125
   rotationSmoothness: 0.1
   zoomSensitivity: 5
+  aimLockYawDeadzoneDegrees: 60.4
   compensateCursorDuringAds: 1
   warpPixelThreshold: 0.5
   screenEdgeMarginPixels: 2

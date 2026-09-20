@@ -82,5 +82,21 @@ namespace Tactics.Camera
             if (dz > 1e-5f) maxW = Mathf.Min(maxW, allowedZ / dz);
             return Mathf.Max(0f, maxW);
         }
+
+        /// <summary>
+        /// Yaw target for the camera aim lock: hold <paramref name="currentYaw"/>
+        /// while the aim sits within the deadzone band, and past the edge drag the
+        /// target so the aim lands exactly ON the edge — the band then re-centers as
+        /// the turn continues. Inside the band the current yaw is returned
+        /// UNTOUCHED (not a recomputed equal value), so a jittering aim can never
+        /// creep the view. A zero deadzone reproduces 1:1 aim tracking exactly.
+        /// </summary>
+        public static float DeadzonedYaw(float currentYaw, float aimYaw, float deadzoneDegrees)
+        {
+            float half = Mathf.Max(0f, deadzoneDegrees);
+            float delta = Mathf.DeltaAngle(currentYaw, aimYaw);
+            if (Mathf.Abs(delta) <= half) return currentYaw;
+            return Mathf.Repeat(currentYaw + delta - Mathf.Sign(delta) * half, 360f);
+        }
     }
 }
