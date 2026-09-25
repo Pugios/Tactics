@@ -17,7 +17,7 @@ MonoBehaviour:
   cost: 2900
   wallPenetration: 1
   fireMode: 0
-  fireRate: 5.4
+  fireRate: 9.75
   magazineSize: 25
   reserveAmmo: 75
   pelletCount: 1
@@ -38,6 +38,14 @@ MonoBehaviour:
   maxSpreadStanding: 1
   maxSpreadCrouched: 0.85
   spreadPerShotDegrees: 0.11
+  sprayShotSpreads:
+  - 0.25
+  - 0.3
+  - 0.35
+  - 0.56
+  - 0.77
+  - 0.99
+  - 1
   movePenaltyCrouchWalk: 0.8
   movePenaltyWalk: 3
   movePenaltyRun: 6
@@ -79,8 +87,10 @@ MonoBehaviour:
     m_RotationOrder: 4
   recoilSwayDegrees: 2
   recoilSwayPeriodShots: 5
-  sprayDecayDelay: 0.15
-  sprayDecayPerSecond: 15
+  sprayDecayDelay: 0
+  sprayDecayPerSecond: 11.3
+  gunRecoveryTime: 0.375
+  tapEfficiency: 6
   perfectMultiplier: 1
   mediumMultiplier: 0.25
   lowMultiplier: 0.21

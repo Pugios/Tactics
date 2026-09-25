@@ -325,15 +325,14 @@ namespace Tactics.Weapons
             // an ADS stance is primary fire at the aimed rate.
             bool ads = playerController != null && playerController.IsAiming;
             float nextInterval = FireModeStats.IntervalSeconds(weapon, altFire, ads);
-            float sprayIndex = SpreadCalculator.DecaySprayIndex(localSprayIndex,
+            SpreadCalculator.SprayState spray = SpreadCalculator.EvaluateSpray(weapon, localSprayIndex,
                 Time.time - localLastFireTime,
-                FireModeStats.RequiredGapSeconds(localLastFireInterval, nextInterval),
-                weapon.sprayDecayDelay, weapon.sprayDecayPerSecond);
+                FireModeStats.RequiredGapSeconds(localLastFireInterval, nextInterval));
             bool grounded = movementNetwork == null || movementNetwork.PredictedGrounded;
             float horizontalSpeed = movementNetwork != null ? movementNetwork.PredictedHorizontalSpeed : 0f;
             Tactics.Player.MovementState movement = Tactics.Player.MovementClassifier.Classify(
                 grounded, crouched, walking, horizontalSpeed);
-            return SpreadCalculator.ComputeDisplayedSpreadDegrees(weapon, sprayIndex, crouched, altFire, movement,
+            return SpreadCalculator.ComputeDisplayedSpreadDegrees(weapon, spray, crouched, altFire, movement,
                 includeFiringError, includeMovementError);
         }
 
@@ -384,10 +383,9 @@ namespace Tactics.Weapons
             // Advance the local spray mirror in the same decay-then-increment
             // order the server applies, only for shots that are actually sent,
             // so the crosshair tracks serverSprayIndex.
-            localSprayIndex = SpreadCalculator.DecaySprayIndex(localSprayIndex,
+            localSprayIndex = SpreadCalculator.EvaluateSpray(currentWeapon, localSprayIndex,
                 Time.time - localLastFireTime,
-                FireModeStats.RequiredGapSeconds(localLastFireInterval, interval),
-                currentWeapon.sprayDecayDelay, currentWeapon.sprayDecayPerSecond) + 1f;
+                FireModeStats.RequiredGapSeconds(localLastFireInterval, interval)).Index + 1f;
             localLastFireTime = Time.time;
             localLastFireInterval = interval;
 
@@ -458,17 +456,17 @@ namespace Tactics.Weapons
                 serverSprayIndex = 0f;
                 serverLastWeaponId = weaponId;
             }
-            serverSprayIndex = SpreadCalculator.DecaySprayIndex(serverSprayIndex, secondsSinceLastShot,
-                (float)requiredGap, weapon.sprayDecayDelay, weapon.sprayDecayPerSecond);
+            SpreadCalculator.SprayState spray = SpreadCalculator.EvaluateSpray(weapon, serverSprayIndex,
+                secondsSinceLastShot, (float)requiredGap);
             Tactics.Player.MovementState movement = movementNetwork != null
                 ? movementNetwork.GetAuthoritativeMovementState()
                 : Tactics.Player.MovementState.Stationary;
             bool altColumn = alt || ads;
             int pellets = Mathf.Clamp(pelletCount, 1, FireModeStats.MaxPelletCount(weapon, alt));
-            Vector2[] pelletOffsets = SpreadCalculator.ComputePelletOffsetsDegrees(weapon, serverSprayIndex,
+            Vector2[] pelletOffsets = SpreadCalculator.ComputePelletOffsetsDegrees(weapon, spray,
                 crouched, altColumn, movement, spreadSeed, serverShotNumber, pellets);
             serverShotNumber += pellets;
-            serverSprayIndex += 1f;
+            serverSprayIndex = spray.Index + 1f;
 
             ResolveShotServer(weapon, startPoint, aimPoint, pelletOffsets,
                 FireModeStats.SpreadDistanceExponent(weapon, alt), ComputeRewindTime());
