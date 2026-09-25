@@ -67,6 +67,90 @@ namespace Tactics.Weapons
             return Mathf.Max(0f, sprayIndex - (secondsSinceLastShot - grace) * decayPerSecond);
         }
 
+        /// <summary>
+        /// Where a spray stands at the moment the next shot fires.
+        /// <see cref="Index"/> is the drained shot counter: recoil reads it, and
+        /// the shot leaves it at Index + 1. The spread reads the counter the LAST
+        /// shot left (<see cref="SpreadIndex"/>) and keeps only
+        /// <see cref="GrowthRemaining"/> of that growth over the first-shot spread.
+        /// </summary>
+        public readonly struct SprayState
+        {
+            public readonly float Index;
+            public readonly float SpreadIndex;
+            public readonly float GrowthRemaining;
+
+            public SprayState(float index, float spreadIndex, float growthRemaining)
+            {
+                Index = index;
+                SpreadIndex = spreadIndex;
+                GrowthRemaining = growthRemaining;
+            }
+
+            /// <summary>A shot fired the instant the gun is ready: the full held-fire value.</summary>
+            public static SprayState Held(float sprayIndex) => new SprayState(sprayIndex, sprayIndex, 1f);
+        }
+
+        /// <summary>
+        /// Advances a spray to the next shot, given the counter the last shot
+        /// left and the time since it.
+        ///
+        /// Legacy weapons (gunRecoveryTime 0): the counter drains after
+        /// <see cref="DecaySprayIndex"/>'s grace and the spread is read straight
+        /// off the drained counter.
+        ///
+        /// Valorant recovery (gunRecoveryTime > 0), measured on the Vandal. Once
+        /// the gun is ready to fire again, the spread slides in a straight line
+        /// from the held-fire value back to the first-shot spread over
+        /// min(counter, tapEfficiency) / tapEfficiency × gunRecoveryTime: each
+        /// shot adds 1/tapEfficiency of the recovery time, so a full spray takes
+        /// the whole of it and a short burst recovers proportionally faster.
+        /// Meanwhile the counter drains more slowly (sprayDecayPerSecond), which
+        /// is what makes quick taps accrue spread even though each one partly
+        /// recovered. Once the spread has fully recovered, the counter resets
+        /// too — a gun left for its whole recovery time fires a first shot.
+        /// </summary>
+        public static SprayState EvaluateSpray(WeaponData weapon, float sprayIndex,
+            float secondsSinceLastShot, float requiredGapSeconds)
+        {
+            float counter = DecaySprayIndex(sprayIndex, secondsSinceLastShot, requiredGapSeconds,
+                weapon.sprayDecayDelay, weapon.sprayDecayPerSecond);
+            if (weapon.gunRecoveryTime <= 0f) return SprayState.Held(counter);
+
+            float remaining = RecoveryRemaining(weapon, sprayIndex,
+                secondsSinceLastShot - Mathf.Max(requiredGapSeconds, 0f));
+            return new SprayState(remaining > 0f ? counter : 0f, sprayIndex, remaining);
+        }
+
+        /// <summary>
+        /// Share (1 → 0) of the last shot's spread growth still present
+        /// <paramref name="secondsSinceReady"/> after the gun could fire again.
+        /// </summary>
+        public static float RecoveryRemaining(WeaponData weapon, float sprayIndex, float secondsSinceReady)
+        {
+            float tapEfficiency = Mathf.Max(weapon.tapEfficiency, 1f);
+            float duration = Mathf.Min(sprayIndex, tapEfficiency) / tapEfficiency * weapon.gunRecoveryTime;
+            if (duration <= 0f) return 0f;
+            return Mathf.Clamp01(1f - Mathf.Max(secondsSinceReady, 0f) / duration);
+        }
+
+        /// <summary>
+        /// Spread growth over the first shot after <paramref name="sprayIndex"/>
+        /// held shots, before the max cap. From the weapon's per-shot table when
+        /// it has one (linearly interpolated, holding its last value), otherwise
+        /// the flat spreadPerShotDegrees.
+        /// </summary>
+        public static float SprayGrowthDegrees(WeaponData weapon, float sprayIndex)
+        {
+            float[] table = weapon.sprayShotSpreads;
+            if (table == null || table.Length == 0) return weapon.spreadPerShotDegrees * sprayIndex;
+
+            float x = Mathf.Clamp(sprayIndex, 0f, table.Length - 1);
+            int i = Mathf.Min((int)x, table.Length - 2);
+            float value = i < 0 ? table[0] : Mathf.Lerp(table[i], table[i + 1], x - i);
+            return value - table[0];
+        }
+
         /// <summary>Deterministic recoil (the T): x = sway degrees, y = backward climb degrees.</summary>
         public static Vector2 ComputeRecoilDegrees(WeaponData weapon, float sprayIndex)
         {
@@ -102,6 +186,15 @@ namespace Tactics.Weapons
         /// </summary>
         public static float ComputeSpreadDegrees(WeaponData weapon, float sprayIndex,
             bool crouched, bool altFire, MovementState movement)
+            => ComputeSpreadDegrees(weapon, SprayState.Held(sprayIndex), crouched, altFire, movement);
+
+        /// <summary>
+        /// The cone for a shot fired at <paramref name="spray"/>: the held-fire
+        /// spread at its SpreadIndex (capped at max), blended back toward the
+        /// first-shot spread by how far the gun has recovered.
+        /// </summary>
+        public static float ComputeSpreadDegrees(WeaponData weapon, SprayState spray,
+            bool crouched, bool altFire, MovementState movement)
         {
             // Defensive: an alt flag on a weapon without an alt-fire is ignored.
             bool useAltColumn = altFire && weapon.altFireType != AltFireType.None;
@@ -113,8 +206,14 @@ namespace Tactics.Weapons
             float max = useAltColumn
                 ? (crouched ? weapon.altMaxSpreadCrouched : weapon.altMaxSpreadStanding)
                 : (crouched ? weapon.maxSpreadCrouched : weapon.maxSpreadStanding);
-            float growth = altOwnsMovement ? weapon.altSpreadPerShotDegrees : weapon.spreadPerShotDegrees;
-            float spread = Mathf.Min(first + growth * sprayIndex, max);
+            // The per-shot table describes the primary column's climb; ADS and
+            // crouch reuse it from their own first-shot value, capped at their max.
+            float growth = altOwnsMovement
+                ? weapon.altSpreadPerShotDegrees * spray.SpreadIndex
+                : SprayGrowthDegrees(weapon, spray.SpreadIndex);
+            float spread = Mathf.Min(first + growth, max);
+            if (spray.GrowthRemaining < 1f)
+                spread = first + (spread - first) * Mathf.Max(spray.GrowthRemaining, 0f);
 
             switch (movement)
             {
@@ -146,9 +245,15 @@ namespace Tactics.Weapons
         public static float ComputeDisplayedSpreadDegrees(WeaponData weapon, float sprayIndex,
             bool crouched, bool altFire, MovementState movement,
             bool includeFiringError, bool includeMovementError)
+            => ComputeDisplayedSpreadDegrees(weapon, SprayState.Held(sprayIndex), crouched, altFire, movement,
+                includeFiringError, includeMovementError);
+
+        public static float ComputeDisplayedSpreadDegrees(WeaponData weapon, SprayState spray,
+            bool crouched, bool altFire, MovementState movement,
+            bool includeFiringError, bool includeMovementError)
         {
             return ComputeSpreadDegrees(weapon,
-                includeFiringError ? sprayIndex : 0f,
+                includeFiringError ? spray : SprayState.Held(0f),
                 crouched, altFire,
                 includeMovementError ? movement : MovementState.Stationary);
         }
@@ -161,10 +266,15 @@ namespace Tactics.Weapons
         /// </summary>
         public static Vector2 ComputeShotOffsetDegrees(WeaponData weapon, float sprayIndex,
             bool crouched, bool altFire, MovementState movement, int seed, int shotNumber)
-        {
-            Vector2 offset = ComputeRecoilDegrees(weapon, sprayIndex);
+            => ComputeShotOffsetDegrees(weapon, SprayState.Held(sprayIndex), crouched, altFire, movement,
+                seed, shotNumber);
 
-            float spread = ComputeSpreadDegrees(weapon, sprayIndex, crouched, altFire, movement);
+        public static Vector2 ComputeShotOffsetDegrees(WeaponData weapon, SprayState spray,
+            bool crouched, bool altFire, MovementState movement, int seed, int shotNumber)
+        {
+            Vector2 offset = ComputeRecoilDegrees(weapon, spray.Index);
+
+            float spread = ComputeSpreadDegrees(weapon, spray, crouched, altFire, movement);
             HashShot(seed, shotNumber, out float u1, out float u2);
             float rollAngle = u1 * 2f * Mathf.PI;
             float rollRadius = Mathf.Sqrt(u2) * spread; // sqrt → uniform over the cone's disc
@@ -183,11 +293,16 @@ namespace Tactics.Weapons
         /// </summary>
         public static Vector2[] ComputePelletOffsetsDegrees(WeaponData weapon, float sprayIndex,
             bool crouched, bool altFire, MovementState movement, int seed, int baseShotNumber, int pelletCount)
+            => ComputePelletOffsetsDegrees(weapon, SprayState.Held(sprayIndex), crouched, altFire, movement,
+                seed, baseShotNumber, pelletCount);
+
+        public static Vector2[] ComputePelletOffsetsDegrees(WeaponData weapon, SprayState spray,
+            bool crouched, bool altFire, MovementState movement, int seed, int baseShotNumber, int pelletCount)
         {
             var offsets = new Vector2[pelletCount];
             for (int i = 0; i < pelletCount; i++)
             {
-                offsets[i] = ComputeShotOffsetDegrees(weapon, sprayIndex, crouched, altFire, movement,
+                offsets[i] = ComputeShotOffsetDegrees(weapon, spray, crouched, altFire, movement,
                     seed, baseShotNumber + i);
             }
             return offsets;

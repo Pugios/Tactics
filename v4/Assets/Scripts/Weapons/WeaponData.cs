@@ -87,6 +87,11 @@ namespace Tactics.Weapons
         public float maxSpreadStanding = 1f;
         public float maxSpreadCrouched = 0.85f;
         public float spreadPerShotDegrees = 0.11f; // growth per consecutive shot toward max
+        // Spread of each shot while the trigger is held, standing, hip (element 0
+        // = shot 1 = firstShotSpreadStanding), as read off Valorant's spread graph.
+        // Replaces spreadPerShotDegrees when set; the crouch/ADS columns climb by
+        // the same amounts from their own first-shot value. Past the end it holds.
+        public float[] sprayShotSpreads = new float[0];
         public float movePenaltyCrouchWalk = 0.8f;
         public float movePenaltyWalk = 3f;
         public float movePenaltyRun = 6f;
@@ -115,6 +120,12 @@ namespace Tactics.Weapons
         [Header("Spray Recovery")]
         public float sprayDecayDelay = 0.15f; // grace before accuracy starts recovering
         public float sprayDecayPerSecond = 15f; // spray-index units recovered per second after that
+        // Valorant recovery (see SpreadCalculator.EvaluateSpray); 0 = legacy.
+        // Once the gun can fire again, spread slides back to the first shot over
+        // min(shots, tapEfficiency) / tapEfficiency × gunRecoveryTime. The shot
+        // counter meanwhile drains at sprayDecayPerSecond after sprayDecayDelay.
+        public float gunRecoveryTime = 0f; // seconds to recover from a full spray
+        public float tapEfficiency = 6f; // shots that build up the full recovery time
 
         [Header("Hit Level Multipliers (Relative to Head Damage)")]
         public float perfectMultiplier = 1.0f;
